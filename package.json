@@ -1,0 +1,27 @@
+{
+  "name": "ts-extractor",
+  "version": "1.0.0",
+  "description": "Extract stuff like modules, classes, interfaces and enums from typescript projects",
+  "main": "dist/index.js",
+  "devDependencies": {
+    "typescript": "^4.3.5",
+    "@typescript-eslint/eslint-plugin": "^4.28.4",
+    "@typescript-eslint/parser": "^4.28.4",
+    "eslint": "^7.31.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "run": "tsc && node ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GoogleFeud/ts-extractor.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/GoogleFeud/ts-extractor/issues"
+  },
+  "homepage": "https://github.com/GoogleFeud/ts-extractor#readme"
+}
