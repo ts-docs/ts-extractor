@@ -1,5 +1,5 @@
 
-import {ArrowFunction, ConstantDecl, createModule, Module, Reference, ReferenceTypes, TypeOrLiteral, TypeParameter} from "./structure";
+import {ArrowFunction, ClassMethod, ClassProperty, ConstantDecl, createModule, FunctionParameter, Module, Reference, ReferenceTypes, TypeOrLiteral, TypeParameter} from "./structure";
 import * as ts from "typescript";
 
 export class TypescriptExtractor {
@@ -45,11 +45,57 @@ export class TypescriptExtractor {
     handleClassDeclaration(node: ts.ClassDeclaration, file: ts.SourceFile) : void {
         const module = this.moduleFromFile(file);
         if (!module) return;
+        const methods: Array<ClassMethod> = [];
+        const properties: Array<ClassProperty> = [];
+        let constructor: ArrowFunction|undefined;
+        for (const member of node.members) {
+            let isStatic, isPrivate, isProtected;
+            if (member.modifiers) {
+                for (const modifier of member.modifiers) {
+                    if (modifier.kind === ts.SyntaxKind.StaticKeyword) isStatic = true;
+                    if (modifier.kind === ts.SyntaxKind.ProtectedKeyword) isProtected = true;
+                    if (modifier.kind === ts.SyntaxKind.PrivateKeyword) isPrivate = true;
+                }
+            }
+            if (ts.isPropertyDeclaration(member)) {
+                properties.push({
+                    name: member.name.getText(file),
+                    type: member.type && this.resolveType(member.type, file),
+                    start: member.pos,
+                    optional: Boolean(member.questionToken),
+                    end: member.end,
+                    isPrivate, isProtected, isStatic
+                });
+            }
+            else if (ts.isMethodDeclaration(member)) {
+                methods.push({
+                    name: member.name.getText(file),
+                    returnType: member.type && this.resolveType(member.type, file),
+                    typeParameters: member.typeParameters && member.typeParameters.map(p => this.resolveGenerics(p, file)),
+                    parameters: member.parameters.map(p => this.resolveParameter(p, file)),
+                    start: member.pos,
+                    end: member.end,
+                    isPrivate, isProtected, isStatic
+                });
+            }
+            else if (ts.isConstructorDeclaration(member)) {
+                constructor = {
+                    parameters: member.parameters.map(p => this.resolveParameter(p, file)),
+                    start: member.pos,
+                    end: member.pos
+                };
+            }
+        }
         module.classes.push({
             name: node.name?.text || "empty",
             typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p, file)),
+            properties,
+            methods,
+            constructor,
             start: node.pos,
-            end: node.end
+            end: node.end,
+            isAbstract: node.modifiers && node.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
+            extends: node.heritageClauses && this.resolveType(node.heritageClauses[0].types[0], file) as Reference
         });
     }
 
@@ -70,17 +116,27 @@ export class TypescriptExtractor {
         return lastModule;
     }
 
-    forEachModule<R>(module: Module, cb: (module: Module) => R) : R|undefined {
+    forEachModule<R>(module: Module, cb: (module: Module) => R, final?: R) : R|undefined {
+        const firstCb = cb(module);
+        if (firstCb) return firstCb;
         for (const [, mod] of module.modules) {
-            const res = cb(mod) || this.forEachModule(mod, cb);
+            const res = this.forEachModule(mod, cb);
             if (res) return res;
         }
-        return undefined;
+        return final;
     } 
 
     resolveType(type: ts.Node, file: ts.SourceFile) : TypeOrLiteral|undefined {
-        if (ts.isTypeReferenceNode(type)) {
-            const name = type.typeName.getText(file);
+        if (ts.isTypeReferenceNode(type) || ts.isExpressionWithTypeArguments(type)) {
+            let name: string;
+            if (ts.isTypeReferenceNode(type)) name = type.typeName.getText(file);
+            else {
+                if (ts.isIdentifier(type.expression)) name = type.expression.text;
+                else return {
+                    name: type.getText(file),
+                    type: ReferenceTypes.STRINGIFIED
+                };
+            }
             if (this.references.has(name)) return this.references.get(name) as Reference;
             const path: Array<string> = [];
             return this.forEachModule<TypeOrLiteral|undefined>(this.module, (module) => {
@@ -111,18 +167,18 @@ export class TypescriptExtractor {
                         typeParameters: type.typeArguments ? type.typeArguments.map(arg => this.resolveType(arg, file)) : undefined
                     } as TypeOrLiteral;
                 }
-                else return {
-                    name,
-                    type: ReferenceTypes.UNKNOWN,
-                    typeParameters: type.typeArguments ? type.typeArguments.map(arg => this.resolveType(arg, file)) : undefined
-                } as TypeOrLiteral;
-            });
+                else return undefined;
+            }, {
+                name,
+                type: ReferenceTypes.UNKNOWN,
+                typeParameters: type.typeArguments ? type.typeArguments.map(arg => this.resolveType(arg, file)) : undefined
+            } as TypeOrLiteral);
         }
         else if (ts.isFunctionTypeNode(type)) {
             return {
                 typeParameters: type.typeParameters ? type.typeParameters.map(p => this.resolveGenerics(p, file)) : undefined,
                 returnType: this.resolveType(type.type, file),
-                parameters: type.parameters.map(p => this.resolveType(p, file))
+                parameters: type.parameters.map(p => this.resolveParameter(p, file))
             } as ArrowFunction;
         }
         else switch (type.kind) {
@@ -145,6 +201,17 @@ export class TypescriptExtractor {
             default: generic.default ? this.resolveType(generic.default, file) : undefined,
             constraint: generic.constraint ? this.resolveType(generic.constraint, file) : undefined
         } as TypeParameter;
+    }
+
+    resolveParameter(param: ts.ParameterDeclaration, file: ts.SourceFile) : FunctionParameter {
+        return {
+            name: param.name.getText(file),
+            optional: Boolean(param.questionToken),
+            rest: Boolean(param.dotDotDotToken),
+            type: param.type && this.resolveType(param.type, file),
+            start: param.pos,
+            end: param.end
+        };
     }
 
 } 

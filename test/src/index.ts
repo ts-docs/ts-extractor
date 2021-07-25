@@ -1,10 +1,16 @@
 import {B} from "./inner/test";
 
-class A {
-    a: string
+export class A extends Array<string> {
+    private static a: string
     constructor(a: string) {
-        this.a = a;
+        super();
+        //this.a = a;
+    }
+
+    someFn<T extends string>(text: T) : string {
+        return text.toUpperCase();
     }
 }
 
-export const a: () => B<string> = () => new B();
+const m = new A("");
+export const a: (a: A) => B<string> = () => new B();

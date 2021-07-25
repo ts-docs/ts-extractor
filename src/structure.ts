@@ -46,6 +46,7 @@ export const enum ReferenceTypes {
     UNDEFINED,
     NULL,
     ANY,
+    STRINGIFIED,
     UNKNOWN
 }
 
@@ -72,15 +73,14 @@ export interface ClassMember extends Node {
 
 export interface ClassProperty extends ClassMember {
     type?: TypeOrLiteral,
-    typeParameters?: TypeParameter,
     optional?: boolean,
     exclamation?: boolean
 }
 
 export interface FunctionParameter extends Node {
     type?: TypeOrLiteral,
-    isRest?: boolean,
-    isOptional?: boolean,
+    rest?: boolean,
+    optional?: boolean,
     defaultValue?: string
 }
 
@@ -95,7 +95,9 @@ export interface ClassDecl extends Node {
     properties?: Array<ClassProperty>,
     methods?: Array<ClassMethod>,
     extends?: Reference,
-    implements?: Reference
+    constructor?: ArrowFunction,
+    implements?: Reference,
+    isAbstract?: boolean
 }
 
 export interface FunctionDecl extends Node {
@@ -107,7 +109,7 @@ export interface FunctionDecl extends Node {
 export interface ArrowFunction extends Omit<Node, "name"> {
     typeParameters?: Array<TypeParameter>,
     returnType?: TypeOrLiteral,
-    parameters?: Array<TypeOrLiteral>
+    parameters?: Array<FunctionParameter>
 }
 
 export interface ObjectLiteral extends Omit<Node, "name">  {
