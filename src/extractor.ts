@@ -32,6 +32,19 @@ export class TypescriptExtractor {
         else if (ts.isClassDeclaration(node) && isInExport) return this.handleClassDeclaration(node, file);
         else if (ts.isInterfaceDeclaration(node) && isInExport) return this.handleInterfaceDeclaration(node, file);
         else if (ts.isEnumDeclaration(node) && isInExport) return this.handleEnumDeclaration(node, file);
+        else if (ts.isFunctionDeclaration(node) && isInExport) return this.handleFunctionDeclaration(node, file);
+    }
+
+    handleFunctionDeclaration(node: ts.FunctionDeclaration, file: ts.SourceFile) : void {
+        this.currentModule.functions.push({
+            name: node.name?.text,
+            parameters: node.parameters.map(p => this.resolveParameter(p, file)),
+            typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p, file)),
+            returnType: node.type && this.resolveType(node.type, file),
+            start: node.pos,
+            end: node.end,
+            sourceFile: this.currentFile
+        });
     }
 
     handleVariableDeclaration(node: ts.VariableStatement, file: ts.SourceFile) : void {
@@ -109,7 +122,7 @@ export class TypescriptExtractor {
             }
         }
         this.currentModule.classes.push({
-            name: node.name?.text || "empty",
+            name: node.name?.text,
             typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p, file)),
             properties,
             methods,

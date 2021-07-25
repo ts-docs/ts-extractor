@@ -14,3 +14,7 @@ export class A extends Array<string> {
 
 const m = new A("");
 export const a: (a: A) => B<string> = () => new B();
+
+export default function(a: string, b: B<string>) : string|number {
+    return 4;
+}

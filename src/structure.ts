@@ -19,6 +19,13 @@ export interface Node {
     sourceFile?: string
 }
 
+export interface PotentiallyNamelessNode {
+    name?: string,
+    start: number,
+    end: number,
+    sourceFile?: string
+}
+
 export function createModule(name: string, sourceFile: string, isGlobal?: boolean) : Module {
     return {
         name,
@@ -99,7 +106,7 @@ export interface ClassMethod extends ClassMember {
 
 export type Constructor = Omit<ArrowFunction, "kind">
 
-export interface ClassDecl extends Node {
+export interface ClassDecl extends PotentiallyNamelessNode {
     typeParameters?: Array<TypeParameter>,
     properties?: Array<ClassProperty>,
     methods?: Array<ClassMethod>,
@@ -109,10 +116,10 @@ export interface ClassDecl extends Node {
     isAbstract?: boolean
 }
 
-export interface FunctionDecl extends Node {
+export interface FunctionDecl extends PotentiallyNamelessNode {
     typeParameters?: Array<TypeParameter>,
     returnType?: TypeOrLiteral,
-    parameters?: Array<FunctionParameter>
+    parameters: Array<FunctionParameter>
 }
 
 
