@@ -27,22 +27,36 @@ export function createModule(name: string, sourceFile: string) : Module {
         interfaces: [],
         types: [],
         enums: [],
-        constants: []
+        constants: [],
     };
+}
+
+export const enum ReferenceTypes {
+    CLASS,
+    INTERFACE,
+    ENUM,
+    FUNCTION,
+    CONSTANT,
+    NUMBER,
+    STRING,
+    BOOLEAN,
+    VOID,
+    TRUE,
+    FALSE,
+    UNDEFINED,
+    NULL,
+    ANY,
+    UNKNOWN
 }
 
 export interface Reference {
     name: string,
     path?: Array<string>,
-    typeParameters?: Array<TypeParameter>
+    typeParameters?: Array<TypeOrLiteral>,
+    type: ReferenceTypes
 }
 
-export interface Literal {
-    stringified: string,
-    object?: ObjectLiteral | ArrowFunction | Union; 
-}
-
-export type TypeOrLiteral = Reference | Literal;
+export type TypeOrLiteral = Reference | ObjectLiteral | ArrowFunction | Union;
 
 export interface TypeParameter extends Node {
     default?: TypeOrLiteral,
@@ -77,9 +91,9 @@ export interface ClassMethod extends ClassMember {
 }
 
 export interface ClassDecl extends Node {
-    typeParameters: Array<TypeParameter>,
-    properties: Array<ClassProperty>,
-    methods: Array<ClassMethod>,
+    typeParameters?: Array<TypeParameter>,
+    properties?: Array<ClassProperty>,
+    methods?: Array<ClassMethod>,
     extends?: Reference,
     implements?: Reference
 }
@@ -119,7 +133,7 @@ export interface TypeDecl extends Node {
 }
 
 export interface ConstantDecl extends Node {
-    type?: TypeOrLiteral,
+    type?: TypeOrLiteral|undefined,
     content: string
 }
 

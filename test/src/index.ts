@@ -7,6 +7,4 @@ class A {
     }
 }
 
-const a = new A("HELLOW");
-
-console.log(a, new B());
+export const a: () => B<string> = () => new B();

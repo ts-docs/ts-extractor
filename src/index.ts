@@ -36,4 +36,4 @@ export function extract(projectPath: string) : Module {
 }
 
 
-console.log(extract("../test"));
+console.dir(extract("../test"), {depth: 544});
