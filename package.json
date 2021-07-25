@@ -10,8 +10,8 @@
     "eslint": "^7.31.0"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "run": "tsc && node ."
+    "run": "tsc && node .",
+    "test": "tsc && cd test && ttsc && node dist/index.js"
   },
   "repository": {
     "type": "git",
