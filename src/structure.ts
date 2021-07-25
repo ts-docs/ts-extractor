@@ -15,7 +15,8 @@ export interface Module {
 export interface Node {
     name: string,
     start: number,
-    end: number
+    end: number,
+    sourceFile?: string
 }
 
 export function createModule(name: string, sourceFile: string, isGlobal?: boolean) : Module {
@@ -162,4 +163,5 @@ export interface EnumMember extends Node {
 
 export interface EnumDecl extends Node {
     members: Array<EnumMember>
+    const: boolean
 }

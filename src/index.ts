@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as ts from "typescript";
 import { TypescriptExtractor } from "./extractor";
 import { createModule, Module } from "./structure";
+import { getLastItemFromPath } from "./util";
 
 
 export function extract(projectPath: string) : Module {
@@ -24,8 +25,11 @@ export function extract(projectPath: string) : Module {
     }
 
     const globalModule = createModule("Global", rootDirPath, true);
-    const extractor = new TypescriptExtractor(globalModule, rootDirPath.substring(rootDirPath.lastIndexOf("\\") + 1));
-    const program = ts.createProgram([path.join(rootDirPath, "index.ts")], checked.options);
+    const extractor = new TypescriptExtractor(globalModule, getLastItemFromPath(rootDirPath));
+
+    const host = ts.createCompilerHost(checked.options);
+
+    const program = ts.createProgram([path.join(rootDirPath, "index.ts")], checked.options, host);
 
     for (const file of program.getSourceFiles()) {
         if (file.isDeclarationFile) continue;

@@ -1,20 +1,26 @@
 
 import {ArrowFunction, ClassMethod, ClassProperty, ConstantDecl, Constructor, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration } from "./structure";
 import * as ts from "typescript";
+import * as path from "path";
 
 export class TypescriptExtractor {
     module: Module
     references: Map<string, Reference>
     baseDir: string
     visitor: (node: ts.Node, file: ts.SourceFile) => void
+    currentModule: Module
+    currentFile?: string
     constructor(globalModule: Module, baseDir: string) {
         this.module = globalModule;
+        this.currentModule = this.module;
         this.references = new Map();
         this.baseDir = baseDir;
         this.visitor = this._visitor.bind(this);
     }
 
     runOnFile(file: ts.SourceFile) : void {
+        this.currentModule = this.moduleFromFile(file) as unknown as Module;
+        this.currentFile = file.fileName;
         for (const stmt of file.statements) {
             this._visitor(stmt, file);
         }
@@ -24,12 +30,11 @@ export class TypescriptExtractor {
         const isInExport = node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword);
         if (ts.isVariableStatement(node) && isInExport) return this.handleVariableDeclaration(node, file);
         else if (ts.isClassDeclaration(node) && isInExport) return this.handleClassDeclaration(node, file);
-        else if (ts.isInterfaceDeclaration(node) && isInExport) return this.handleInterface(node, file);
+        else if (ts.isInterfaceDeclaration(node) && isInExport) return this.handleInterfaceDeclaration(node, file);
+        else if (ts.isEnumDeclaration(node) && isInExport) return this.handleEnumDeclaration(node, file);
     }
 
     handleVariableDeclaration(node: ts.VariableStatement, file: ts.SourceFile) : void {
-        const module = this.moduleFromFile(file);
-        if (!module) return;
         const declarations: Array<ConstantDecl> = [];
         for (const declaration of node.declarationList.declarations) {
             if (!declaration.initializer) continue;
@@ -38,15 +43,30 @@ export class TypescriptExtractor {
                 content: declaration.initializer.getText(file),
                 start: node.pos,
                 end: node.end,
-                type: declaration.type ? this.resolveType(declaration.type, file) : undefined
+                type: declaration.type ? this.resolveType(declaration.type, file) : undefined,
+                sourceFile: this.currentFile
             });
         }
-        module.constants.push(...declarations);
+        this.currentModule.constants.push(...declarations);
+    }
+
+    handleEnumDeclaration(node: ts.EnumDeclaration, file: ts.SourceFile) : void {
+        this.currentModule.enums.push({
+            name: node.name.text,
+            const: Boolean(node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ConstKeyword)),
+            members: node.members.map(m => ({
+                name: m.name.getText(file),
+                initializer: m.initializer && m.initializer.getText(file),
+                start: m.pos,
+                end: m.end,
+            })),
+            start: node.pos,
+            end: node.end,
+            sourceFile: this.currentFile
+        });
     }
 
     handleClassDeclaration(node: ts.ClassDeclaration, file: ts.SourceFile) : void {
-        const module = this.moduleFromFile(file);
-        if (!module) return;
         const methods: Array<ClassMethod> = [];
         const properties: Array<ClassProperty> = [];
         let constructor: Constructor|undefined;
@@ -88,7 +108,7 @@ export class TypescriptExtractor {
                 };
             }
         }
-        module.classes.push({
+        this.currentModule.classes.push({
             name: node.name?.text || "empty",
             typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p, file)),
             properties,
@@ -97,18 +117,18 @@ export class TypescriptExtractor {
             start: node.pos,
             end: node.end,
             isAbstract: node.modifiers && node.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
-            extends: node.heritageClauses && this.resolveType(node.heritageClauses[0].types[0], file) as Reference
+            extends: node.heritageClauses && this.resolveType(node.heritageClauses[0].types[0], file) as Reference,
+            sourceFile: this.currentFile
         });
     }
 
-    handleInterface(node: ts.InterfaceDeclaration, file: ts.SourceFile) : void {
-        const module = this.moduleFromFile(file);
-        if (!module) return;
-        module.interfaces.push({
+    handleInterfaceDeclaration(node: ts.InterfaceDeclaration, file: ts.SourceFile) : void {
+        this.currentModule.interfaces.push({
             name: node.name.text,
             properties: node.members.map(m => this.resolveProperty(m as ts.PropertySignature, file)),
             start: node.pos,
-            end: node.end
+            end: node.end,
+            sourceFile: this.currentFile
         });
     }
 
@@ -118,11 +138,11 @@ export class TypescriptExtractor {
         paths = paths.slice(paths.indexOf(this.baseDir) + 1);
         if (paths.length === 0) return this.module;
         let lastModule = this.module;        
-        for (const path of paths) {
-            const newLastMod = lastModule.modules.get(path);
+        for (const pathPart of paths) {
+            const newLastMod = lastModule.modules.get(pathPart);
             if (!newLastMod) {
-                const mod = createModule(path, file.fileName);
-                lastModule.modules.set(path, mod);
+                const mod = createModule(pathPart, path.resolve(file.fileName, "../"));
+                lastModule.modules.set(pathPart, mod);
                 lastModule = mod;
             } else lastModule = newLastMod;
         }

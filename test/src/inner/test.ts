@@ -1,4 +1,5 @@
 
+import {C} from "./test1";
 /*
 THis is a test!
 */
