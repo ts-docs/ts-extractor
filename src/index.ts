@@ -23,7 +23,7 @@ export function extract(projectPath: string) : Module {
         rootDirPath = p;
     }
 
-    const globalModule = createModule("Global", rootDirPath);
+    const globalModule = createModule("Global", rootDirPath, true);
     const extractor = new TypescriptExtractor(globalModule, rootDirPath.substring(rootDirPath.lastIndexOf("\\") + 1));
     const program = ts.createProgram([path.join(rootDirPath, "index.ts")], checked.options);
 

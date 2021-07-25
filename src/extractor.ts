@@ -1,5 +1,5 @@
 
-import {ArrowFunction, ClassMethod, ClassProperty, ConstantDecl, createModule, FunctionParameter, Module, Reference, ReferenceTypes, TypeOrLiteral, TypeParameter} from "./structure";
+import {ArrowFunction, ClassMethod, ClassProperty, ConstantDecl, Constructor, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty} from "./structure";
 import * as ts from "typescript";
 
 export class TypescriptExtractor {
@@ -47,7 +47,7 @@ export class TypescriptExtractor {
         if (!module) return;
         const methods: Array<ClassMethod> = [];
         const properties: Array<ClassProperty> = [];
-        let constructor: ArrowFunction|undefined;
+        let constructor: Constructor|undefined;
         for (const member of node.members) {
             let isStatic, isPrivate, isProtected;
             if (member.modifiers) {
@@ -134,43 +134,43 @@ export class TypescriptExtractor {
                 if (ts.isIdentifier(type.expression)) name = type.expression.text;
                 else return {
                     name: type.getText(file),
-                    type: ReferenceTypes.STRINGIFIED
+                    kind: TypeKinds.STRINGIFIED
                 };
             }
             if (this.references.has(name)) return this.references.get(name) as Reference;
             const path: Array<string> = [];
             return this.forEachModule<TypeOrLiteral|undefined>(this.module, (module) => {
                 if (module.classes.some(cl => cl.name === name)) {
-                    path.push(module.name);
+                    if (!module.isGlobal) path.push(module.name);
                     return {
                         name,
                         path,
-                        type: ReferenceTypes.CLASS,
+                        kind: TypeKinds.CLASS,
                         typeParameters: type.typeArguments ? type.typeArguments.map(arg => this.resolveType(arg, file)) : undefined
                     } as TypeOrLiteral;
                 }
                 else if (module.interfaces.some(inter => inter.name === name)) {
-                    path.push(module.name);
+                    if (!module.isGlobal) path.push(module.name);
                     return {
                         name,
                         path,
-                        type: ReferenceTypes.INTERFACE,
+                        kind: TypeKinds.INTERFACE,
                         typeParameters: type.typeArguments ? type.typeArguments.map(arg => this.resolveType(arg, file)) : undefined
                     } as TypeOrLiteral;
                 }
                 else if (module.enums.some(en => en.name === name)) {
-                    path.push(module.name);
+                    if (!module.isGlobal) path.push(module.name);
                     return {
                         name,
                         path,
-                        type: ReferenceTypes.ENUM,
+                        kind: TypeKinds.ENUM,
                         typeParameters: type.typeArguments ? type.typeArguments.map(arg => this.resolveType(arg, file)) : undefined
                     } as TypeOrLiteral;
                 }
                 else return undefined;
             }, {
                 name,
-                type: ReferenceTypes.UNKNOWN,
+                kind: TypeKinds.UNKNOWN,
                 typeParameters: type.typeArguments ? type.typeArguments.map(arg => this.resolveType(arg, file)) : undefined
             } as TypeOrLiteral);
         }
@@ -178,20 +178,27 @@ export class TypescriptExtractor {
             return {
                 typeParameters: type.typeParameters ? type.typeParameters.map(p => this.resolveGenerics(p, file)) : undefined,
                 returnType: this.resolveType(type.type, file),
-                parameters: type.parameters.map(p => this.resolveParameter(p, file))
+                parameters: type.parameters.map(p => this.resolveParameter(p, file)),
+                kind: TypeKinds.ARROW_FUNCTION
             } as ArrowFunction;
         }
+        else if (ts.isTypeLiteralNode(type)) {
+            return {
+                properties: type.members.map(p => this.resolveProperty(p as ts.PropertySignature, file)),
+                kind: TypeKinds.OBJECT_LITERAL
+            } as ObjectLiteral;
+        }
         else switch (type.kind) {
-        case ts.SyntaxKind.NumberKeyword: return {name: "number", type: ReferenceTypes.NUMBER};
-        case ts.SyntaxKind.StringKeyword: return {name: "string", type: ReferenceTypes.STRING};
-        case ts.SyntaxKind.BooleanKeyword: return {name: "boolean", type: ReferenceTypes.BOOLEAN};
-        case ts.SyntaxKind.TrueKeyword: return { name: "true", type: ReferenceTypes.TRUE};
-        case ts.SyntaxKind.FalseKeyword: return { name: "false", type: ReferenceTypes.FALSE};
-        case ts.SyntaxKind.UndefinedKeyword: return { name: "undefined", type: ReferenceTypes.UNDEFINED};
-        case ts.SyntaxKind.NullKeyword: return { name: "null", type: ReferenceTypes.NULL};
-        case ts.SyntaxKind.VoidKeyword: return { name: "void", type: ReferenceTypes.VOID };
-        case ts.SyntaxKind.AnyKeyword: return { name: "any", type: ReferenceTypes.ANY };
-        default: return {name: "unknown", type: ReferenceTypes.UNKNOWN};
+        case ts.SyntaxKind.NumberKeyword: return {name: "number", kind: TypeKinds.NUMBER};
+        case ts.SyntaxKind.StringKeyword: return {name: "string", kind: TypeKinds.STRING};
+        case ts.SyntaxKind.BooleanKeyword: return {name: "boolean", kind: TypeKinds.BOOLEAN};
+        case ts.SyntaxKind.TrueKeyword: return { name: "true", kind: TypeKinds.TRUE};
+        case ts.SyntaxKind.FalseKeyword: return { name: "false", kind: TypeKinds.FALSE};
+        case ts.SyntaxKind.UndefinedKeyword: return { name: "undefined", kind: TypeKinds.UNDEFINED};
+        case ts.SyntaxKind.NullKeyword: return { name: "null", kind: TypeKinds.NULL};
+        case ts.SyntaxKind.VoidKeyword: return { name: "void", kind: TypeKinds.VOID };
+        case ts.SyntaxKind.AnyKeyword: return { name: "any", kind: TypeKinds.ANY };
+        default: return {name: "unknown", kind: TypeKinds.UNKNOWN};
         }
     }
 
@@ -211,6 +218,16 @@ export class TypescriptExtractor {
             type: param.type && this.resolveType(param.type, file),
             start: param.pos,
             end: param.end
+        };
+    }
+
+    resolveProperty(prop: ts.PropertySignature, file: ts.SourceFile) : InterfaceProperty {
+        return {
+            name: prop.name.getText(file),
+            type: prop.type && this.resolveType(prop.type, file),
+            optional: Boolean(prop.questionToken),
+            start: prop.pos,
+            end: prop.end
         };
     }
 

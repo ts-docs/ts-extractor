@@ -8,6 +8,7 @@ export interface Module {
     types: Array<TypeDecl>,
     enums: Array<EnumDecl>,
     constants: Array<ConstantDecl>,
+    isGlobal?: boolean
     sourceFile: string
 }
 
@@ -17,7 +18,7 @@ export interface Node {
     end: number
 }
 
-export function createModule(name: string, sourceFile: string) : Module {
+export function createModule(name: string, sourceFile: string, isGlobal?: boolean) : Module {
     return {
         name,
         sourceFile,
@@ -28,10 +29,11 @@ export function createModule(name: string, sourceFile: string) : Module {
         types: [],
         enums: [],
         constants: [],
+        isGlobal
     };
 }
 
-export const enum ReferenceTypes {
+export const enum TypeKinds {
     CLASS,
     INTERFACE,
     ENUM,
@@ -47,14 +49,18 @@ export const enum ReferenceTypes {
     NULL,
     ANY,
     STRINGIFIED,
-    UNKNOWN
+    UNKNOWN,
+    ARROW_FUNCTION,
+    OBJECT_LITERAL,
+    UNION
 }
+
 
 export interface Reference {
     name: string,
     path?: Array<string>,
     typeParameters?: Array<TypeOrLiteral>,
-    type: ReferenceTypes
+    kind: TypeKinds
 }
 
 export type TypeOrLiteral = Reference | ObjectLiteral | ArrowFunction | Union;
@@ -90,12 +96,14 @@ export interface ClassMethod extends ClassMember {
     parameters?: Array<FunctionParameter>
 }
 
+export type Constructor = Omit<ArrowFunction, "kind">
+
 export interface ClassDecl extends Node {
     typeParameters?: Array<TypeParameter>,
     properties?: Array<ClassProperty>,
     methods?: Array<ClassMethod>,
     extends?: Reference,
-    constructor?: ArrowFunction,
+    constructor?: Constructor,
     implements?: Reference,
     isAbstract?: boolean
 }
@@ -106,24 +114,28 @@ export interface FunctionDecl extends Node {
     parameters?: Array<FunctionParameter>
 }
 
+
 export interface ArrowFunction extends Omit<Node, "name"> {
     typeParameters?: Array<TypeParameter>,
     returnType?: TypeOrLiteral,
-    parameters?: Array<FunctionParameter>
+    parameters?: Array<FunctionParameter>,
+    kind: TypeKinds
 }
 
 export interface ObjectLiteral extends Omit<Node, "name">  {
-    properties: Array<InterfaceProperty>
+    properties: Array<InterfaceProperty>,
+    kind: TypeKinds
 }
 
 export interface Union extends Omit<Node, "name"> {
     left: TypeOrLiteral,
-    right: TypeOrLiteral
+    right: TypeOrLiteral,
+    kind: TypeKinds
 }
 
 export interface InterfaceProperty extends Node {
-    type: TypeOrLiteral,
-    isOptional: boolean
+    type?: TypeOrLiteral,
+    optional: boolean
 }
 
 export interface InterfaceDecl extends Node {
