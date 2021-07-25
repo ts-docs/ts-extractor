@@ -162,17 +162,17 @@ export class TypescriptExtractor {
         return lastModule;
     }
 
-    forEachModule<R>(module: Module, cb: (module: Module) => R, final?: R) : R|undefined {
+    forEachModule<R>(module: Module, cb: (module: Module) => R|undefined, final: R) : R {
         const firstCb = cb(module);
         if (firstCb) return firstCb;
         for (const [, mod] of module.modules) {
-            const res = this.forEachModule(mod, cb);
+            const res = this.forEachModule(mod, cb, final);
             if (res) return res;
         }
         return final;
     } 
 
-    resolveType(type: ts.Node, file: ts.SourceFile) : TypeOrLiteral|undefined {
+    resolveType(type: ts.Node, file: ts.SourceFile) : TypeOrLiteral {
         if (ts.isTypeReferenceNode(type) || ts.isExpressionWithTypeArguments(type)) {
             let name: string;
             if (ts.isTypeReferenceNode(type)) name = type.typeName.getText(file);
@@ -185,7 +185,7 @@ export class TypescriptExtractor {
             }
             if (this.references.has(name)) return this.references.get(name) as Reference;
             const path: Array<string> = [];
-            return this.forEachModule<TypeOrLiteral|undefined>(this.module, (module) => {
+            return this.forEachModule<TypeOrLiteral>(this.module, (module) => {
                 if (module.classes.some(cl => cl.name === name)) {
                     if (!module.isGlobal) path.push(module.name);
                     return {
@@ -233,6 +233,14 @@ export class TypescriptExtractor {
                 properties: type.members.map(p => this.resolveProperty(p as ts.PropertySignature, file)),
                 kind: TypeKinds.OBJECT_LITERAL
             } as ObjectLiteral;
+        }
+        else if (ts.isUnionTypeNode(type)) {
+            return {
+                types: type.types.map(t => this.resolveType(t, file)),
+                kind: TypeKinds.UNION,
+                start: type.pos,
+                end: type.end
+            };
         }
         else switch (type.kind) {
         case ts.SyntaxKind.NumberKeyword: return {name: "number", kind: TypeKinds.NUMBER};

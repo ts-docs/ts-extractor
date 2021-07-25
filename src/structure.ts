@@ -141,8 +141,7 @@ export interface ObjectLiteral extends Omit<Node, "name">  {
 }
 
 export interface Union extends Omit<Node, "name"> {
-    left: TypeOrLiteral,
-    right: TypeOrLiteral,
+    types: Array<TypeOrLiteral>,
     kind: TypeKinds
 }
 
