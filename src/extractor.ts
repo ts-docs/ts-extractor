@@ -1,5 +1,5 @@
 
-import {ArrowFunction, ClassMethod, ClassProperty, ConstantDecl, Constructor, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty} from "./structure";
+import {ArrowFunction, ClassMethod, ClassProperty, ConstantDecl, Constructor, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration } from "./structure";
 import * as ts from "typescript";
 
 export class TypescriptExtractor {
@@ -21,8 +21,10 @@ export class TypescriptExtractor {
     }
 
     _visitor(node: ts.Node, file: ts.SourceFile) : void {
-        if (ts.isVariableStatement(node) && node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)) return this.handleVariableDeclaration(node, file);
-        else if (ts.isClassDeclaration(node) && node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)) return this.handleClassDeclaration(node, file);
+        const isInExport = node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword);
+        if (ts.isVariableStatement(node) && isInExport) return this.handleVariableDeclaration(node, file);
+        else if (ts.isClassDeclaration(node) && isInExport) return this.handleClassDeclaration(node, file);
+        else if (ts.isInterfaceDeclaration(node) && isInExport) return this.handleInterface(node, file);
     }
 
     handleVariableDeclaration(node: ts.VariableStatement, file: ts.SourceFile) : void {
@@ -99,6 +101,17 @@ export class TypescriptExtractor {
         });
     }
 
+    handleInterface(node: ts.InterfaceDeclaration, file: ts.SourceFile) : void {
+        const module = this.moduleFromFile(file);
+        if (!module) return;
+        module.interfaces.push({
+            name: node.name.text,
+            properties: node.members.map(m => this.resolveProperty(m as ts.PropertySignature, file)),
+            start: node.pos,
+            end: node.end
+        });
+    }
+
     moduleFromFile(file: ts.SourceFile) : Module|undefined {
         let paths = file.fileName.split("/");
         paths.pop(); // Remove the filename
@@ -146,7 +159,7 @@ export class TypescriptExtractor {
                         name,
                         path,
                         kind: TypeKinds.CLASS,
-                        typeParameters: type.typeArguments ? type.typeArguments.map(arg => this.resolveType(arg, file)) : undefined
+                        typeParameters: type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file))
                     } as TypeOrLiteral;
                 }
                 else if (module.interfaces.some(inter => inter.name === name)) {
@@ -155,7 +168,7 @@ export class TypescriptExtractor {
                         name,
                         path,
                         kind: TypeKinds.INTERFACE,
-                        typeParameters: type.typeArguments ? type.typeArguments.map(arg => this.resolveType(arg, file)) : undefined
+                        typeParameters: type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file))
                     } as TypeOrLiteral;
                 }
                 else if (module.enums.some(en => en.name === name)) {
@@ -164,19 +177,19 @@ export class TypescriptExtractor {
                         name,
                         path,
                         kind: TypeKinds.ENUM,
-                        typeParameters: type.typeArguments ? type.typeArguments.map(arg => this.resolveType(arg, file)) : undefined
+                        typeParameters: type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file))
                     } as TypeOrLiteral;
                 }
                 else return undefined;
             }, {
                 name,
                 kind: TypeKinds.UNKNOWN,
-                typeParameters: type.typeArguments ? type.typeArguments.map(arg => this.resolveType(arg, file)) : undefined
+                typeParameters: type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file))
             } as TypeOrLiteral);
         }
         else if (ts.isFunctionTypeNode(type)) {
             return {
-                typeParameters: type.typeParameters ? type.typeParameters.map(p => this.resolveGenerics(p, file)) : undefined,
+                typeParameters: type.typeParameters && type.typeParameters.map(p => this.resolveGenerics(p, file)),
                 returnType: this.resolveType(type.type, file),
                 parameters: type.parameters.map(p => this.resolveParameter(p, file)),
                 kind: TypeKinds.ARROW_FUNCTION
@@ -221,14 +234,23 @@ export class TypescriptExtractor {
         };
     }
 
-    resolveProperty(prop: ts.PropertySignature, file: ts.SourceFile) : InterfaceProperty {
-        return {
+    resolveProperty(prop: ts.TypeElement, file: ts.SourceFile) : InterfaceProperty|IndexSignatureDeclaration {
+        if (ts.isPropertySignature(prop)) return {
             name: prop.name.getText(file),
             type: prop.type && this.resolveType(prop.type, file),
             optional: Boolean(prop.questionToken),
             start: prop.pos,
             end: prop.end
         };
+        else {
+            const param = (prop as ts.IndexSignatureDeclaration).parameters[0];
+            return {
+                key: param.type && this.resolveType(param.type, file),
+                type: this.resolveType((prop as ts.IndexSignatureDeclaration).type, file),
+                start: prop.pos,
+                end: prop.end
+            } as IndexSignatureDeclaration;
+        }
     }
 
 } 

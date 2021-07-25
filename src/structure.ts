@@ -122,8 +122,13 @@ export interface ArrowFunction extends Omit<Node, "name"> {
     kind: TypeKinds
 }
 
+export interface IndexSignatureDeclaration extends Omit<Node, "name"> {
+    key?: TypeOrLiteral,
+    type: TypeOrLiteral
+}
+
 export interface ObjectLiteral extends Omit<Node, "name">  {
-    properties: Array<InterfaceProperty>,
+    properties: Array<InterfaceProperty|IndexSignatureDeclaration>,
     kind: TypeKinds
 }
 
@@ -139,7 +144,7 @@ export interface InterfaceProperty extends Node {
 }
 
 export interface InterfaceDecl extends Node {
-    properties: Array<InterfaceProperty>,
+    properties: Array<InterfaceProperty|IndexSignatureDeclaration>,
 }
 
 export interface TypeDecl extends Node {

@@ -8,4 +8,9 @@ export class B<T = unknown> {
     }
 }
 
-
+export interface AAA {
+    [key: string]: number|number|B|undefined,
+    a: string,
+    b: number,
+    c?: B
+}
