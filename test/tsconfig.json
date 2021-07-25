@@ -7,9 +7,6 @@
       "outDir": "./dist",
       "removeComments": true,
       "strict": true,
-      "experimentalDecorators": true,
-      "plugins": [
-        { "transform": "../dist/index.js" }
-    ]
-    },
+      "experimentalDecorators": true
+    }
   }
