@@ -1,2 +1,12 @@
+import {B} from "./inner/test";
 
-console.log("Hello World!");
+class A {
+    a: string
+    constructor(a: string) {
+        this.a = a;
+    }
+}
+
+const a = new A("HELLOW");
+
+console.log(a, new B());

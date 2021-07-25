@@ -1,7 +1,7 @@
 
 export interface Module {
     name: string,
-    modules: Array<Module>,
+    modules: Map<string, Module>,
     classes: Array<ClassDecl>,
     functions: Array<FunctionDecl>,
     interfaces: Array<InterfaceDecl>,
@@ -21,7 +21,7 @@ export function createModule(name: string, sourceFile: string) : Module {
     return {
         name,
         sourceFile,
-        modules: [],
+        modules: new Map(),
         classes: [],
         functions: [],
         interfaces: [],

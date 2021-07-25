@@ -5,11 +5,6 @@ import * as ts from "typescript";
 import { TypescriptExtractor } from "./extractor";
 import { createModule, Module } from "./structure";
 
-export const TransformerFactory = (module: Module): ts.TransformerFactory<ts.SourceFile> => ctx => {
-    return firstNode => {
-        return new TypescriptExtractor(ctx, module).run(firstNode) as ts.SourceFile;
-    };
-};
 
 export function extract(projectPath: string) : Module {
     const pathToOptions = path.join(__dirname, projectPath, "tsconfig.json");
@@ -19,24 +14,26 @@ export function extract(projectPath: string) : Module {
     const checked = ts.convertCompilerOptionsFromJson(options.compilerOptions, projectPath, "tsconfig.json");
     if (checked.errors[0]) throw new Error(checked.errors[0].messageText.toString());
 
-    let rootFilePath: string|undefined;
+    let rootDirPath = "";
     if (checked.options.rootDir && fs.existsSync(path.join(__dirname, projectPath, checked.options.rootDir, "index.ts"))) {
-        rootFilePath = path.join(__dirname, projectPath, checked.options.rootDir, "index.ts");
+        rootDirPath = path.join(__dirname, projectPath, checked.options.rootDir);
     } else if (options.tsDocs && options.tsDocs.rootFile) {
-        const p = path.join(__dirname, projectPath, options.tsDocs.rootFile, "index.ts");
+        const p = path.join(__dirname, projectPath, options.tsDocs.rootDir);
         if (!fs.existsSync(p)) throw new Error("Couldn't find project entry file.");
-        rootFilePath = p;
+        rootDirPath = p;
     }
 
-    if (!rootFilePath) throw new Error("Couldn't find project entry file.");
+    const globalModule = createModule("Global", rootDirPath);
+    const extractor = new TypescriptExtractor(globalModule, rootDirPath.substring(rootDirPath.lastIndexOf("\\") + 1));
+    const program = ts.createProgram([path.join(rootDirPath, "index.ts")], checked.options);
 
-    const globalModule = createModule("Global", rootFilePath);
+    for (const file of program.getSourceFiles()) {
+        if (file.isDeclarationFile) continue;
+        extractor.runOnFile(file);
+    }
 
-    ts.transpileModule(fs.readFileSync(rootFilePath, "utf-8"), {
-        compilerOptions: options,
-        transformers: {before: [TransformerFactory(globalModule)]}
-    });
     return globalModule;
 }
+
 
 console.log(extract("../test"));
