@@ -16,7 +16,8 @@ export interface Node {
     name: string,
     start: number,
     end: number,
-    sourceFile?: string
+    sourceFile?: string,
+    comment?: string
 }
 
 export interface PotentiallyNamelessNode {
@@ -61,18 +62,27 @@ export const enum TypeKinds {
     ARROW_FUNCTION,
     OBJECT_LITERAL,
     TYPE_ALIAS,
+    TUPLE,
     UNION
 }
 
-
-export interface Reference {
+export interface ReferenceType {
     name: string,
     path?: Array<string>,
-    typeParameters?: Array<TypeOrLiteral>,
     kind: TypeKinds
 }
 
-export type TypeOrLiteral = Reference | ObjectLiteral | ArrowFunction | Union;
+export interface Reference {
+    type: ReferenceType,
+    typeParameters?: Array<TypeOrLiteral>
+}
+
+export interface Literal {
+    name: string,
+    kind: TypeKinds
+}
+
+export type TypeOrLiteral = Reference | ObjectLiteral | ArrowFunction | Union | Literal;
 
 export interface TypeParameter extends Node {
     default?: TypeOrLiteral,
@@ -142,6 +152,11 @@ export interface ObjectLiteral extends Omit<Node, "name">  {
 }
 
 export interface Union extends Omit<Node, "name"> {
+    types: Array<TypeOrLiteral>,
+    kind: TypeKinds
+}
+
+export interface Tuple extends Omit<Node, "name"> {
     types: Array<TypeOrLiteral>,
     kind: TypeKinds
 }

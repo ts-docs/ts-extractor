@@ -10,4 +10,4 @@ export enum SomeTypes {
     c = 5
 }
 
-export type CBound = C<SomeTypes>
+export type CBound = C<SomeTypes> | [string, number, SomeTypes]

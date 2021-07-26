@@ -25,11 +25,8 @@ export function extract(projectPath: string) : Module {
     }
 
     const globalModule = createModule("Global", rootDirPath, true);
-    const extractor = new TypescriptExtractor(globalModule, getLastItemFromPath(rootDirPath));
-
-    const host = ts.createCompilerHost(checked.options);
-
-    const program = ts.createProgram([path.join(rootDirPath, "index.ts")], checked.options, host);
+    const program = ts.createProgram([path.join(rootDirPath, "index.ts")], checked.options);
+    const extractor = new TypescriptExtractor(globalModule, getLastItemFromPath(rootDirPath), program.getTypeChecker());
 
     for (const file of program.getSourceFiles()) {
         if (file.isDeclarationFile) continue;

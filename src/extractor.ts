@@ -1,19 +1,21 @@
 
-import {ArrowFunction, ClassMethod, ClassProperty, ConstantDecl, Constructor, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration } from "./structure";
+import {ArrowFunction, ClassMethod, ClassProperty, ConstantDecl, Constructor, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType } from "./structure";
 import * as ts from "typescript";
 import * as path from "path";
 
 export class TypescriptExtractor {
     module: Module
-    references: Map<string, Reference>
+    references: Map<ts.Symbol, ReferenceType>
     baseDir: string
     visitor: (node: ts.Node, file: ts.SourceFile) => void
     currentModule: Module
-    constructor(globalModule: Module, baseDir: string) {
+    checker: ts.TypeChecker
+    constructor(globalModule: Module, baseDir: string, checker: ts.TypeChecker) {
         this.module = globalModule;
         this.currentModule = this.module;
         this.references = new Map();
         this.baseDir = baseDir;
+        this.checker = checker;
         this.visitor = this._visitor.bind(this);
     }
 
@@ -25,13 +27,14 @@ export class TypescriptExtractor {
     }
 
     _visitor(node: ts.Node, file: ts.SourceFile) : void {
-        const isInExport = node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword);
-        if (ts.isVariableStatement(node) && isInExport) return this.handleVariableDeclaration(node, file);
-        else if (ts.isClassDeclaration(node) && isInExport) return this.handleClassDeclaration(node, file);
-        else if (ts.isInterfaceDeclaration(node) && isInExport) return this.handleInterfaceDeclaration(node, file);
-        else if (ts.isEnumDeclaration(node) && isInExport) return this.handleEnumDeclaration(node, file);
-        else if (ts.isFunctionDeclaration(node) && isInExport) return this.handleFunctionDeclaration(node, file);
-        else if (ts.isTypeAliasDeclaration(node) && isInExport) return this.handleTypeDeclaration(node, file);
+        if (!(node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword))) return;
+        if (ts.isVariableStatement(node)) return this.handleVariableDeclaration(node, file);
+        else if (ts.isClassDeclaration(node)) return this.handleClassDeclaration(node, file);
+        else if (ts.isInterfaceDeclaration(node)) return this.handleInterfaceDeclaration(node, file);
+        else if (ts.isEnumDeclaration(node)) return this.handleEnumDeclaration(node, file);
+        else if (ts.isFunctionDeclaration(node)) return this.handleFunctionDeclaration(node, file);
+        else if (ts.isTypeAliasDeclaration(node)) return this.handleTypeDeclaration(node, file);
+        else if (ts.isModuleDeclaration(node)) return ts.forEachChild(node, (child) => this.visitor(child, file));
     }
 
     handleTypeDeclaration(node: ts.TypeAliasDeclaration, file: ts.SourceFile) : void {
@@ -184,60 +187,71 @@ export class TypescriptExtractor {
     resolveType(type: ts.Node, file: ts.SourceFile) : TypeOrLiteral {
         if (ts.isTypeReferenceNode(type) || ts.isExpressionWithTypeArguments(type)) {
             let name: string;
-            if (ts.isTypeReferenceNode(type)) name = type.typeName.getText(file);
+            let symbol: ts.Symbol|undefined;
+            if (ts.isTypeReferenceNode(type)) {
+                name = type.typeName.getText(file);
+                symbol = this.checker.getSymbolAtLocation(type.typeName);
+            }
             else {
+                symbol = this.checker.getSymbolAtLocation(type.expression);
                 if (ts.isIdentifier(type.expression)) name = type.expression.text;
                 else return {
-                    name: type.getText(file),
-                    kind: TypeKinds.STRINGIFIED
+                    type: {
+                        name: type.getText(file),
+                        kind: TypeKinds.STRINGIFIED
+                    }
                 };
             }
-            if (this.references.has(name)) return this.references.get(name) as Reference;
+            const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file));
+            if (!symbol) return {
+                type: {
+                    name,
+                    kind: TypeKinds.UNKNOWN
+                },
+                typeParameters
+            };
+            if (this.references.has(symbol)) return {type: this.references.get(symbol) as ReferenceType, typeParameters};
             const path: Array<string> = [];
-            return this.forEachModule<TypeOrLiteral>(this.module, (module) => {
-                const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file));
+            const ref = this.forEachModule<ReferenceType>(this.module, (module) => {
                 if (module.classes.some(cl => cl.name === name)) {
                     if (!module.isGlobal) path.push(module.name);
                     return {
                         name,
                         path,
                         kind: TypeKinds.CLASS,
-                        typeParameters
-                    } as TypeOrLiteral;
+                    };
                 }
                 else if (module.interfaces.some(inter => inter.name === name)) {
                     if (!module.isGlobal) path.push(module.name);
                     return {
                         name,
                         path,
-                        kind: TypeKinds.INTERFACE,
-                        typeParameters
-                    } as TypeOrLiteral;
+                        kind: TypeKinds.INTERFACE
+                    };
                 }
                 else if (module.enums.some(en => en.name === name)) {
                     if (!module.isGlobal) path.push(module.name);
                     return {
                         name,
                         path,
-                        kind: TypeKinds.ENUM,
-                        typeParameters
-                    } as TypeOrLiteral;
+                        kind: TypeKinds.ENUM
+                    };
                 }
                 else if (module.types.some(en => en.name === name)) {
                     if (!module.isGlobal) path.push(module.name);
                     return {
                         name,
                         path,
-                        kind: TypeKinds.TYPE_ALIAS,
-                        typeParameters
-                    } as TypeOrLiteral;
+                        kind: TypeKinds.TYPE_ALIAS
+                    };
                 }
                 else return undefined;
             }, {
                 name,
-                kind: TypeKinds.UNKNOWN,
-                typeParameters: type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file))
-            } as TypeOrLiteral);
+                kind: TypeKinds.UNKNOWN
+            });
+            this.references.set(symbol, ref);
+            return {type: ref, typeParameters};
         }
         else if (ts.isFunctionTypeNode(type)) {
             return {
@@ -257,6 +271,14 @@ export class TypescriptExtractor {
             return {
                 types: type.types.map(t => this.resolveType(t, file)),
                 kind: TypeKinds.UNION,
+                start: type.pos,
+                end: type.end
+            };
+        }
+        else if (ts.isTupleTypeNode(type)) {
+            return {
+                types: type.elements.map(el => this.resolveType(el, file)),
+                kind: TypeKinds.TUPLE,
                 start: type.pos,
                 end: type.end
             };

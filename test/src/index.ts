@@ -1,6 +1,11 @@
 import {B} from "./inner/test";
 
-export class A extends Array<string> {
+/**
+ * @param a This is a...
+ * 
+ * TEST TEST TEST
+ */
+export class A<T> extends Array<T> {
     private static a: string
     constructor(a: string) {
         super();
@@ -13,8 +18,8 @@ export class A extends Array<string> {
 }
 
 const m = new A("");
-export const a: (a: A) => B<string> = () => new B();
+export const a: (a: A<string>) => B<string> = () => new B();
 
-export default function(a: string, b: B<string>) : string|number {
+export default function(a: A, b: A<number>) : string|number {
     return 4;
 }
