@@ -7,22 +7,19 @@ import { createModule, Module } from "./structure";
 import { getLastItemFromPath } from "./util";
 
 
-export function extract(projectPath: string) : Module {
+export function extract(projectPath: string, rootDir?: string) : Module {
     const pathToOptions = path.join(__dirname, projectPath, "tsconfig.json");
     if (!fs.existsSync(pathToOptions)) throw new Error("Couldn't find tsconfig.json.");
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const options = require(pathToOptions);
-    const checked = ts.convertCompilerOptionsFromJson(options.compilerOptions, projectPath, "tsconfig.json");
+    const checked = ts.convertCompilerOptionsFromJson(require(pathToOptions).compilerOptions, projectPath, "tsconfig.json");
     if (checked.errors[0]) throw new Error(checked.errors[0].messageText.toString());
 
-    let rootDirPath = "";
+    let rootDirPath = rootDir;
     if (checked.options.rootDir && fs.existsSync(path.join(__dirname, projectPath, checked.options.rootDir, "index.ts"))) {
         rootDirPath = path.join(__dirname, projectPath, checked.options.rootDir);
-    } else if (options.tsDocs && options.tsDocs.rootFile) {
-        const p = path.join(__dirname, projectPath, options.tsDocs.rootDir);
-        if (!fs.existsSync(p)) throw new Error("Couldn't find project entry file.");
-        rootDirPath = p;
     }
+
+    if (!rootDirPath) throw new Error("Couldn't find entry file.");
 
     const globalModule = createModule("Global", rootDirPath, true);
     const program = ts.createProgram([path.join(rootDirPath, "index.ts")], checked.options);

@@ -133,7 +133,6 @@ export interface FunctionDecl extends PotentiallyNamelessNode {
     parameters: Array<FunctionParameter>
 }
 
-
 export interface ArrowFunction extends Omit<Node, "name"> {
     typeParameters?: Array<TypeParameter>,
     returnType?: TypeOrLiteral,
