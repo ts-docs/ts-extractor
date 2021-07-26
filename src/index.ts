@@ -8,15 +8,18 @@ import { getLastItemFromPath } from "./util";
 
 
 export function extract(projectPath: string, rootDir?: string) : Module {
+    const __dirname = process.cwd();
     const pathToOptions = path.join(__dirname, projectPath, "tsconfig.json");
     if (!fs.existsSync(pathToOptions)) throw new Error("Couldn't find tsconfig.json.");
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const checked = ts.convertCompilerOptionsFromJson(require(pathToOptions).compilerOptions, projectPath, "tsconfig.json");
+    const options = require(pathToOptions);
+    const checked = ts.convertCompilerOptionsFromJson(options.compilerOptions, projectPath, "tsconfig.json");
     if (checked.errors[0]) throw new Error(checked.errors[0].messageText.toString());
 
-    let rootDirPath = rootDir;
-    if (checked.options.rootDir && fs.existsSync(path.join(__dirname, projectPath, checked.options.rootDir, "index.ts"))) {
-        rootDirPath = path.join(__dirname, projectPath, checked.options.rootDir);
+    let rootDirPath = rootDir ? path.join(__dirname, projectPath, rootDir):undefined;
+
+    if (options.compilerOptions.rootDir && fs.existsSync(path.join(__dirname, projectPath, options.compilerOptions.rootDir, "index.ts"))) {
+        rootDirPath = path.join(__dirname, projectPath, options.compilerOptions.rootDir);
     }
 
     if (!rootDirPath) throw new Error("Couldn't find entry file.");
@@ -32,6 +35,3 @@ export function extract(projectPath: string, rootDir?: string) : Module {
 
     return globalModule;
 }
-
-
-console.dir(extract("../test"), {depth: 544});

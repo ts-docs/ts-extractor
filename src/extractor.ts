@@ -5,7 +5,8 @@ import * as path from "path";
 
 export class TypescriptExtractor {
     module: Module
-    references: Map<ts.Symbol, ReferenceType>
+    referencesNames: Map<string, ReferenceType>
+    referencesSymbols: Map<ts.Symbol, ReferenceType>
     baseDir: string
     visitor: (node: ts.Node, file: ts.SourceFile) => void
     currentModule: Module
@@ -13,7 +14,8 @@ export class TypescriptExtractor {
     constructor(globalModule: Module, baseDir: string, checker: ts.TypeChecker) {
         this.module = globalModule;
         this.currentModule = this.module;
-        this.references = new Map();
+        this.referencesNames = new Map();
+        this.referencesSymbols = new Map();
         this.baseDir = baseDir;
         this.checker = checker;
         this.visitor = this._visitor.bind(this);
@@ -65,7 +67,7 @@ export class TypescriptExtractor {
             if (!declaration.initializer) continue;
             declarations.push({
                 name: declaration.name.getText(file),
-                content: declaration.initializer.getText(file),
+                //content: declaration.initializer.getText(file),
                 start: node.pos,
                 end: node.end,
                 type: declaration.type ? this.resolveType(declaration.type, file) : undefined,
@@ -133,6 +135,8 @@ export class TypescriptExtractor {
                 };
             }
         }
+        const extendsClause = node.heritageClauses?.find(clause => clause.token === ts.SyntaxKind.ExtendsKeyword);
+        const implementsClauses = node.heritageClauses?.find(clause => clause.token === ts.SyntaxKind.ImplementsKeyword);
         this.currentModule.classes.push({
             name: node.name?.text,
             typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p, file)),
@@ -142,15 +146,20 @@ export class TypescriptExtractor {
             start: node.pos,
             end: node.end,
             isAbstract: node.modifiers && node.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
-            extends: node.heritageClauses && this.resolveType(node.heritageClauses[0].types[0], file) as Reference,
+            extends: extendsClause && this.resolveHeritage(extendsClause.types[0], file) as Reference,
+            implements: implementsClauses && implementsClauses.types.map(clause => this.resolveHeritage(clause, file)),
             sourceFile: file.fileName
         });
     }
 
     handleInterfaceDeclaration(node: ts.InterfaceDeclaration, file: ts.SourceFile) : void {
+        const extendsClause = node.heritageClauses && node.heritageClauses.find(c => c.token === ts.SyntaxKind.ExtendsKeyword);
+        const implementsClause = node.heritageClauses && node.heritageClauses.find(c => c.token === ts.SyntaxKind.ImplementsKeyword);
         this.currentModule.interfaces.push({
             name: node.name.text,
             properties: node.members.map(m => this.resolveProperty(m as ts.PropertySignature, file)),
+            extends: extendsClause && this.resolveHeritage(extendsClause.types[0], file),
+            implements: implementsClause && implementsClause.types.map(impl => this.resolveType(impl, file)),
             start: node.pos,
             end: node.end,
             sourceFile: file.fileName
@@ -184,73 +193,62 @@ export class TypescriptExtractor {
         return final;
     } 
 
-    resolveType(type: ts.Node, file: ts.SourceFile) : TypeOrLiteral {
-        if (ts.isTypeReferenceNode(type) || ts.isExpressionWithTypeArguments(type)) {
-            let name: string;
-            let symbol: ts.Symbol|undefined;
-            if (ts.isTypeReferenceNode(type)) {
-                name = type.typeName.getText(file);
-                symbol = this.checker.getSymbolAtLocation(type.typeName);
-            }
-            else {
-                symbol = this.checker.getSymbolAtLocation(type.expression);
-                if (ts.isIdentifier(type.expression)) name = type.expression.text;
-                else return {
-                    type: {
-                        name: type.getText(file),
-                        kind: TypeKinds.STRINGIFIED
-                    }
+    getReferenceTypeFromName(name: string) : ReferenceType {
+        const path: Array<string> = [];
+        return this.forEachModule<ReferenceType>(this.module, (module) => {
+            if (module.classes.some(cl => cl.name === name)) {
+                if (!module.isGlobal) path.push(module.name);
+                return {
+                    name,
+                    path,
+                    kind: TypeKinds.CLASS,
                 };
             }
+            else if (module.interfaces.some(inter => inter.name === name)) {
+                if (!module.isGlobal) path.push(module.name);
+                return {
+                    name,
+                    path,
+                    kind: TypeKinds.INTERFACE
+                };
+            }
+            else if (module.enums.some(en => en.name === name)) {
+                if (!module.isGlobal) path.push(module.name);
+                return {
+                    name,
+                    path,
+                    kind: TypeKinds.ENUM
+                };
+            }
+            else if (module.types.some(en => en.name === name)) {
+                if (!module.isGlobal) path.push(module.name);
+                return {
+                    name,
+                    path,
+                    kind: TypeKinds.TYPE_ALIAS
+                };
+            }
+            else return undefined;
+        }, {
+            name,
+            kind: TypeKinds.UNKNOWN
+        });
+    }
+
+    resolveType(type: ts.Node, file: ts.SourceFile) : TypeOrLiteral {
+        if (ts.isTypeReferenceNode(type)) {
+            const name = type.typeName.getText(file);
+            const symbol = this.checker.getSymbolAtLocation(type.typeName);
             const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file));
             if (!symbol) return {
-                type: {
-                    name,
-                    kind: TypeKinds.UNKNOWN
-                },
+                type: { name: "Unknown", kind: TypeKinds.UNKNOWN},
                 typeParameters
             };
-            if (this.references.has(symbol)) return {type: this.references.get(symbol) as ReferenceType, typeParameters};
-            const path: Array<string> = [];
-            const ref = this.forEachModule<ReferenceType>(this.module, (module) => {
-                if (module.classes.some(cl => cl.name === name)) {
-                    if (!module.isGlobal) path.push(module.name);
-                    return {
-                        name,
-                        path,
-                        kind: TypeKinds.CLASS,
-                    };
-                }
-                else if (module.interfaces.some(inter => inter.name === name)) {
-                    if (!module.isGlobal) path.push(module.name);
-                    return {
-                        name,
-                        path,
-                        kind: TypeKinds.INTERFACE
-                    };
-                }
-                else if (module.enums.some(en => en.name === name)) {
-                    if (!module.isGlobal) path.push(module.name);
-                    return {
-                        name,
-                        path,
-                        kind: TypeKinds.ENUM
-                    };
-                }
-                else if (module.types.some(en => en.name === name)) {
-                    if (!module.isGlobal) path.push(module.name);
-                    return {
-                        name,
-                        path,
-                        kind: TypeKinds.TYPE_ALIAS
-                    };
-                }
-                else return undefined;
-            }, {
-                name,
-                kind: TypeKinds.UNKNOWN
-            });
-            this.references.set(symbol, ref);
+            if (this.referencesSymbols.has(symbol)) return {type: this.referencesSymbols.get(symbol) as ReferenceType, typeParameters};
+            if (this.referencesNames.has(name)) return {type: this.referencesNames.get(name) as ReferenceType, typeParameters};
+            const ref = this.getReferenceTypeFromName(name);
+            this.referencesNames.set(name, ref);
+            this.referencesSymbols.set(symbol, ref);
             return {type: ref, typeParameters};
         }
         else if (ts.isFunctionTypeNode(type)) {
@@ -315,6 +313,25 @@ export class TypescriptExtractor {
             end: param.end
         };
     }
+
+    resolveHeritage(param: ts.ExpressionWithTypeArguments, file: ts.SourceFile) : TypeOrLiteral {
+        if (ts.isIdentifier(param.expression)) {
+            const name = param.expression.text;
+            if (this.referencesNames.has(name)) return this.referencesNames.get(name) as TypeOrLiteral;
+            return {
+                type: this.getReferenceTypeFromName(name),
+                typeParameters: param.typeArguments?.map(arg => this.resolveType(arg, file))
+            };
+        }
+        return {
+            type: {
+                name: param.expression.getText(file),
+                kind: TypeKinds.STRINGIFIED
+            },
+            typeParameters: param.typeArguments?.map(arg => this.resolveType(arg, file))
+        };
+    }
+    
 
     resolveProperty(prop: ts.TypeElement, file: ts.SourceFile) : InterfaceProperty|IndexSignatureDeclaration {
         if (ts.isPropertySignature(prop)) return {

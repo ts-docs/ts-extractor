@@ -123,7 +123,7 @@ export interface ClassDecl extends PotentiallyNamelessNode {
     methods?: Array<ClassMethod>,
     extends?: Reference,
     constructor?: Constructor,
-    implements?: Reference,
+    implements?: Array<TypeOrLiteral>,
     isAbstract?: boolean
 }
 
@@ -167,6 +167,8 @@ export interface InterfaceProperty extends Node {
 
 export interface InterfaceDecl extends Node {
     properties: Array<InterfaceProperty|IndexSignatureDeclaration>,
+    extends?: TypeOrLiteral,
+    implements?: Array<TypeOrLiteral>
 }
 
 export interface TypeDecl extends Node {
@@ -175,7 +177,7 @@ export interface TypeDecl extends Node {
 
 export interface ConstantDecl extends Node {
     type?: TypeOrLiteral|undefined,
-    content: string
+    content?: string
 }
 
 export interface EnumMember extends Node {

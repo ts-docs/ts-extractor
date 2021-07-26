@@ -12,6 +12,7 @@ export class A<T> extends Array<T> {
         //this.a = a;
     }
 
+    someFn(text: string) : void;
     someFn<T extends string>(text: T) : {str: string} {
         return { str: text.toUpperCase() };
     }
