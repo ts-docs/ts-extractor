@@ -12,19 +12,25 @@ export interface Module {
     sourceFile: string
 }
 
+export interface JSDocData {
+    tags?: Array<string>,
+    comment?: string
+}
+
 export interface Node {
     name: string,
     start: number,
     end: number,
     sourceFile?: string,
-    comment?: string
+    jsDoc?: JSDocData
 }
 
 export interface PotentiallyNamelessNode {
     name?: string,
     start: number,
     end: number,
-    sourceFile?: string
+    sourceFile?: string,
+    jsDoc?: JSDocData
 }
 
 export function createModule(name: string, sourceFile: string, isGlobal?: boolean) : Module {
@@ -93,19 +99,21 @@ export interface ClassMember extends Node {
     isPublic?: boolean,
     isPrivate?: boolean,
     isStatic?: boolean,
-    isProtected?: boolean
+    isProtected?: boolean,
+    isAbstract?: boolean
 }
 
 export interface ClassProperty extends ClassMember {
     type?: TypeOrLiteral,
-    optional?: boolean,
+    isOptional?: boolean,
+    isReadonly?: boolean,
     exclamation?: boolean
 }
 
 export interface FunctionParameter extends Node {
     type?: TypeOrLiteral,
     rest?: boolean,
-    optional?: boolean,
+    isOptional?: boolean,
     defaultValue?: string
 }
 
@@ -162,7 +170,8 @@ export interface Tuple extends Omit<Node, "name"> {
 
 export interface InterfaceProperty extends Node {
     type?: TypeOrLiteral,
-    optional: boolean
+    isReadonly?: boolean,
+    isOptional: boolean
 }
 
 export interface InterfaceDecl extends Node {

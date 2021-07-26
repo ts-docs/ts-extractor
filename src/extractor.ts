@@ -1,5 +1,5 @@
 
-import {ArrowFunction, ClassMethod, ClassProperty, ConstantDecl, Constructor, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType } from "./structure";
+import {ArrowFunction, ClassMethod, ClassProperty, ConstantDecl, Constructor, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData } from "./structure";
 import * as ts from "typescript";
 import * as path from "path";
 
@@ -45,7 +45,8 @@ export class TypescriptExtractor {
             value: this.resolveType(node.type, file),
             start: node.pos,
             end: node.end,
-            sourceFile: file.fileName
+            sourceFile: file.fileName,
+            jsDoc: this.getJSDocData(node)
         });
     }
 
@@ -57,7 +58,8 @@ export class TypescriptExtractor {
             returnType: node.type && this.resolveType(node.type, file),
             start: node.pos,
             end: node.end,
-            sourceFile: file.fileName
+            sourceFile: file.fileName,
+            jsDoc: this.getJSDocData(node)
         });
     }
 
@@ -66,12 +68,13 @@ export class TypescriptExtractor {
         for (const declaration of node.declarationList.declarations) {
             if (!declaration.initializer) continue;
             declarations.push({
-                name: declaration.name.getText(file),
+                name: declaration.name.getText(),
                 //content: declaration.initializer.getText(file),
                 start: node.pos,
                 end: node.end,
                 type: declaration.type ? this.resolveType(declaration.type, file) : undefined,
-                sourceFile: file.fileName
+                sourceFile: file.fileName,
+                jsDoc: this.getJSDocData(node)
             });
         }
         this.currentModule.constants.push(...declarations);
@@ -82,14 +85,15 @@ export class TypescriptExtractor {
             name: node.name.text,
             const: Boolean(node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ConstKeyword)),
             members: node.members.map(m => ({
-                name: m.name.getText(file),
-                initializer: m.initializer && m.initializer.getText(file),
+                name: m.name.getText(),
+                initializer: m.initializer && m.initializer.getText(),
                 start: m.pos,
                 end: m.end,
             })),
             start: node.pos,
             end: node.end,
-            sourceFile: file.fileName
+            sourceFile: file.fileName,
+            jsDoc: this.getJSDocData(node)
         });
     }
 
@@ -98,33 +102,37 @@ export class TypescriptExtractor {
         const properties: Array<ClassProperty> = [];
         let constructor: Constructor|undefined;
         for (const member of node.members) {
-            let isStatic, isPrivate, isProtected;
+            let isStatic, isPrivate, isProtected, isReadonly, isAbstract;
             if (member.modifiers) {
                 for (const modifier of member.modifiers) {
                     if (modifier.kind === ts.SyntaxKind.StaticKeyword) isStatic = true;
-                    if (modifier.kind === ts.SyntaxKind.ProtectedKeyword) isProtected = true;
-                    if (modifier.kind === ts.SyntaxKind.PrivateKeyword) isPrivate = true;
+                    else if (modifier.kind === ts.SyntaxKind.ProtectedKeyword) isProtected = true;
+                    else if (modifier.kind === ts.SyntaxKind.PrivateKeyword) isPrivate = true;
+                    else if (modifier.kind === ts.SyntaxKind.ReadonlyKeyword) isReadonly = true;
+                    else if (modifier.kind === ts.SyntaxKind.AbstractKeyword) isAbstract = true;
                 }
             }
             if (ts.isPropertyDeclaration(member)) {
                 properties.push({
-                    name: member.name.getText(file),
+                    name: member.name.getText(),
                     type: member.type && this.resolveType(member.type, file),
                     start: member.pos,
-                    optional: Boolean(member.questionToken),
+                    isOptional: Boolean(member.questionToken),
                     end: member.end,
-                    isPrivate, isProtected, isStatic
+                    isPrivate, isProtected, isStatic, isReadonly, isAbstract, 
+                    jsDoc: this.getJSDocData(member)
                 });
             }
             else if (ts.isMethodDeclaration(member)) {
                 methods.push({
-                    name: member.name.getText(file),
+                    name: member.name.getText(),
                     returnType: member.type && this.resolveType(member.type, file),
                     typeParameters: member.typeParameters && member.typeParameters.map(p => this.resolveGenerics(p, file)),
                     parameters: member.parameters.map(p => this.resolveParameter(p, file)),
                     start: member.pos,
                     end: member.end,
-                    isPrivate, isProtected, isStatic
+                    isPrivate, isProtected, isStatic, isAbstract,
+                    jsDoc: this.getJSDocData(member)
                 });
             }
             else if (ts.isConstructorDeclaration(member)) {
@@ -148,7 +156,8 @@ export class TypescriptExtractor {
             isAbstract: node.modifiers && node.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
             extends: extendsClause && this.resolveHeritage(extendsClause.types[0], file) as Reference,
             implements: implementsClauses && implementsClauses.types.map(clause => this.resolveHeritage(clause, file)),
-            sourceFile: file.fileName
+            sourceFile: file.fileName,
+            jsDoc: this.getJSDocData(node)
         });
     }
 
@@ -162,7 +171,8 @@ export class TypescriptExtractor {
             implements: implementsClause && implementsClause.types.map(impl => this.resolveType(impl, file)),
             start: node.pos,
             end: node.end,
-            sourceFile: file.fileName
+            sourceFile: file.fileName,
+            jsDoc: this.getJSDocData(node)
         });
     }
 
@@ -237,7 +247,7 @@ export class TypescriptExtractor {
 
     resolveType(type: ts.Node, file: ts.SourceFile) : TypeOrLiteral {
         if (ts.isTypeReferenceNode(type)) {
-            const name = type.typeName.getText(file);
+            const name = type.typeName.getText();
             const symbol = this.checker.getSymbolAtLocation(type.typeName);
             const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file));
             if (!symbol) return {
@@ -305,12 +315,13 @@ export class TypescriptExtractor {
 
     resolveParameter(param: ts.ParameterDeclaration, file: ts.SourceFile) : FunctionParameter {
         return {
-            name: param.name.getText(file),
-            optional: Boolean(param.questionToken),
+            name: param.name.getText(),
+            isOptional: Boolean(param.questionToken),
             rest: Boolean(param.dotDotDotToken),
             type: param.type && this.resolveType(param.type, file),
             start: param.pos,
-            end: param.end
+            end: param.end,
+            jsDoc: { comment: this.getJSDocCommentOfParam(param) }
         };
     }
 
@@ -325,7 +336,7 @@ export class TypescriptExtractor {
         }
         return {
             type: {
-                name: param.expression.getText(file),
+                name: param.expression.getText(),
                 kind: TypeKinds.STRINGIFIED
             },
             typeParameters: param.typeArguments?.map(arg => this.resolveType(arg, file))
@@ -335,9 +346,10 @@ export class TypescriptExtractor {
 
     resolveProperty(prop: ts.TypeElement, file: ts.SourceFile) : InterfaceProperty|IndexSignatureDeclaration {
         if (ts.isPropertySignature(prop)) return {
-            name: prop.name.getText(file),
+            name: prop.name.getText(),
             type: prop.type && this.resolveType(prop.type, file),
-            optional: Boolean(prop.questionToken),
+            isOptional: Boolean(prop.questionToken),
+            isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword),
             start: prop.pos,
             end: prop.end
         };
@@ -350,6 +362,30 @@ export class TypescriptExtractor {
                 end: prop.end
             } as IndexSignatureDeclaration;
         }
+    }
+
+    getJSDocCommentOfParam(node: ts.ParameterDeclaration) : string|undefined {
+        const tag = ts.getJSDocParameterTags(node)[0];
+        if (!tag) return;
+        return ts.getTextOfJSDocComment(tag.comment);
+    }
+
+    getJSDocData(node: ts.Node) : JSDocData|undefined {
+        //@ts-expect-error Internal access - Why is this internal??
+        const jsDoc = node.jsDoc as Array<ts.JSDoc>;
+        if (!jsDoc || !jsDoc.length) return undefined;
+        const tagsLoc = jsDoc[0];
+        let tags;
+        if (tagsLoc.tags) {
+            tags = [];
+            for (const tag of tagsLoc.tags) {
+                tags.push(tag.tagName.text);
+            }
+        }
+        return {
+            comment: jsDoc.map(doc => ts.getTextOfJSDocComment(doc.comment)).join("\n"),
+            tags
+        };
     }
 
 } 

@@ -1,6 +1,6 @@
 
 import {C} from "./test1";
-/*
+/** 
 THis is a test!
 */
 export class B<T = unknown> {
@@ -10,6 +10,9 @@ export class B<T = unknown> {
 }
 
 export interface AAA {
+    /**
+     * This can be anything!
+     */
     [key: string]: number|number|B|undefined,
     a: string,
     b: number,

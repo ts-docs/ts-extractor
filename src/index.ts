@@ -25,7 +25,8 @@ export function extract(projectPath: string, rootDir?: string) : Module {
     if (!rootDirPath) throw new Error("Couldn't find entry file.");
 
     const globalModule = createModule("Global", rootDirPath, true);
-    const program = ts.createProgram([path.join(rootDirPath, "index.ts")], checked.options);
+    const host = ts.createCompilerHost(checked.options, true);
+    const program = ts.createProgram([path.join(rootDirPath, "index.ts")], checked.options, host);
     const extractor = new TypescriptExtractor(globalModule, getLastItemFromPath(rootDirPath), program.getTypeChecker());
 
     for (const file of program.getSourceFiles()) {
@@ -35,3 +36,5 @@ export function extract(projectPath: string, rootDir?: string) : Module {
 
     return globalModule;
 }
+
+console.dir(extract("./test"), {depth: 100});
