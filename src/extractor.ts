@@ -9,7 +9,6 @@ export class TypescriptExtractor {
     baseDir: string
     visitor: (node: ts.Node, file: ts.SourceFile) => void
     currentModule: Module
-    currentFile?: string
     constructor(globalModule: Module, baseDir: string) {
         this.module = globalModule;
         this.currentModule = this.module;
@@ -20,7 +19,6 @@ export class TypescriptExtractor {
 
     runOnFile(file: ts.SourceFile) : void {
         this.currentModule = this.moduleFromFile(file) as unknown as Module;
-        this.currentFile = file.fileName;
         for (const stmt of file.statements) {
             this._visitor(stmt, file);
         }
@@ -33,6 +31,17 @@ export class TypescriptExtractor {
         else if (ts.isInterfaceDeclaration(node) && isInExport) return this.handleInterfaceDeclaration(node, file);
         else if (ts.isEnumDeclaration(node) && isInExport) return this.handleEnumDeclaration(node, file);
         else if (ts.isFunctionDeclaration(node) && isInExport) return this.handleFunctionDeclaration(node, file);
+        else if (ts.isTypeAliasDeclaration(node) && isInExport) return this.handleTypeDeclaration(node, file);
+    }
+
+    handleTypeDeclaration(node: ts.TypeAliasDeclaration, file: ts.SourceFile) : void {
+        this.currentModule.types.push({
+            name: node.name.text,
+            value: this.resolveType(node.type, file),
+            start: node.pos,
+            end: node.end,
+            sourceFile: file.fileName
+        });
     }
 
     handleFunctionDeclaration(node: ts.FunctionDeclaration, file: ts.SourceFile) : void {
@@ -43,7 +52,7 @@ export class TypescriptExtractor {
             returnType: node.type && this.resolveType(node.type, file),
             start: node.pos,
             end: node.end,
-            sourceFile: this.currentFile
+            sourceFile: file.fileName
         });
     }
 
@@ -57,7 +66,7 @@ export class TypescriptExtractor {
                 start: node.pos,
                 end: node.end,
                 type: declaration.type ? this.resolveType(declaration.type, file) : undefined,
-                sourceFile: this.currentFile
+                sourceFile: file.fileName
             });
         }
         this.currentModule.constants.push(...declarations);
@@ -75,7 +84,7 @@ export class TypescriptExtractor {
             })),
             start: node.pos,
             end: node.end,
-            sourceFile: this.currentFile
+            sourceFile: file.fileName
         });
     }
 
@@ -131,7 +140,7 @@ export class TypescriptExtractor {
             end: node.end,
             isAbstract: node.modifiers && node.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
             extends: node.heritageClauses && this.resolveType(node.heritageClauses[0].types[0], file) as Reference,
-            sourceFile: this.currentFile
+            sourceFile: file.fileName
         });
     }
 
@@ -141,7 +150,7 @@ export class TypescriptExtractor {
             properties: node.members.map(m => this.resolveProperty(m as ts.PropertySignature, file)),
             start: node.pos,
             end: node.end,
-            sourceFile: this.currentFile
+            sourceFile: file.fileName
         });
     }
 
@@ -186,13 +195,14 @@ export class TypescriptExtractor {
             if (this.references.has(name)) return this.references.get(name) as Reference;
             const path: Array<string> = [];
             return this.forEachModule<TypeOrLiteral>(this.module, (module) => {
+                const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file));
                 if (module.classes.some(cl => cl.name === name)) {
                     if (!module.isGlobal) path.push(module.name);
                     return {
                         name,
                         path,
                         kind: TypeKinds.CLASS,
-                        typeParameters: type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file))
+                        typeParameters
                     } as TypeOrLiteral;
                 }
                 else if (module.interfaces.some(inter => inter.name === name)) {
@@ -201,7 +211,7 @@ export class TypescriptExtractor {
                         name,
                         path,
                         kind: TypeKinds.INTERFACE,
-                        typeParameters: type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file))
+                        typeParameters
                     } as TypeOrLiteral;
                 }
                 else if (module.enums.some(en => en.name === name)) {
@@ -210,7 +220,16 @@ export class TypescriptExtractor {
                         name,
                         path,
                         kind: TypeKinds.ENUM,
-                        typeParameters: type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file))
+                        typeParameters
+                    } as TypeOrLiteral;
+                }
+                else if (module.types.some(en => en.name === name)) {
+                    if (!module.isGlobal) path.push(module.name);
+                    return {
+                        name,
+                        path,
+                        kind: TypeKinds.TYPE_ALIAS,
+                        typeParameters
                     } as TypeOrLiteral;
                 }
                 else return undefined;

@@ -60,6 +60,7 @@ export const enum TypeKinds {
     UNKNOWN,
     ARROW_FUNCTION,
     OBJECT_LITERAL,
+    TYPE_ALIAS,
     UNION
 }
 

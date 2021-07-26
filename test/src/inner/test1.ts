@@ -9,3 +9,5 @@ export enum SomeTypes {
     b,
     c = 5
 }
+
+export type CBound = C<SomeTypes>
