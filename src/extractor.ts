@@ -1,5 +1,5 @@
 
-import {ArrowFunction, ClassMethod, ClassProperty, ConstantDecl, Constructor, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData } from "./structure";
+import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData, InterfaceDecl, ClassDecl } from "./structure";
 import * as ts from "typescript";
 
 export class TypescriptExtractor {
@@ -97,9 +97,19 @@ export class TypescriptExtractor {
     }
 
     handleClassDeclaration(node: ts.ClassDeclaration, file: ts.SourceFile) : void {
-        const methods: Array<ClassMethod> = [];
-        const properties: Array<ClassProperty> = [];
-        let constructor: Constructor|undefined;
+        const res: ClassDecl = {
+            name: node.name?.text,
+            typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p, file)),
+            properties: [],
+            methods: [],
+            constructor: undefined,
+            start: node.pos,
+            end: node.end,
+            isAbstract: node.modifiers && node.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
+            sourceFile: file.fileName,
+            jsDoc: this.getJSDocData(node)
+        };
+        this.currentModule.classes.push(res);
         for (const member of node.members) {
             let isStatic, isPrivate, isProtected, isReadonly, isAbstract;
             if (member.modifiers) {
@@ -112,7 +122,7 @@ export class TypescriptExtractor {
                 }
             }
             if (ts.isPropertyDeclaration(member)) {
-                properties.push({
+                res.properties.push({
                     name: member.name.getText(),
                     type: member.type && this.resolveType(member.type, file),
                     start: member.pos,
@@ -123,7 +133,7 @@ export class TypescriptExtractor {
                 });
             }
             else if (ts.isMethodDeclaration(member)) {
-                methods.push({
+                res.methods.push({
                     name: member.name.getText(),
                     returnType: member.type && this.resolveType(member.type, file),
                     typeParameters: member.typeParameters && member.typeParameters.map(p => this.resolveGenerics(p, file)),
@@ -135,44 +145,38 @@ export class TypescriptExtractor {
                 });
             }
             else if (ts.isConstructorDeclaration(member)) {
-                constructor = {
+                res.constructor = {
                     parameters: member.parameters.map(p => this.resolveParameter(p, file)),
                     start: member.pos,
                     end: member.pos
                 };
             }
         }
-        const extendsClause = node.heritageClauses?.find(clause => clause.token === ts.SyntaxKind.ExtendsKeyword);
-        const implementsClauses = node.heritageClauses?.find(clause => clause.token === ts.SyntaxKind.ImplementsKeyword);
-        this.currentModule.classes.push({
-            name: node.name?.text,
-            typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p, file)),
-            properties,
-            methods,
-            constructor,
-            start: node.pos,
-            end: node.end,
-            isAbstract: node.modifiers && node.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
-            extends: extendsClause && this.resolveHeritage(extendsClause.types[0], file) as Reference,
-            implements: implementsClauses && implementsClauses.types.map(clause => this.resolveHeritage(clause, file)),
-            sourceFile: file.fileName,
-            jsDoc: this.getJSDocData(node)
-        });
+        if (node.heritageClauses) {
+            const extendsClause = node.heritageClauses.find(clause => clause.token === ts.SyntaxKind.ExtendsKeyword);
+            res.extends = extendsClause && this.resolveHeritage(extendsClause.types[0], file) as Reference;
+            const implementsClauses = node.heritageClauses?.find(clause => clause.token === ts.SyntaxKind.ImplementsKeyword);
+            res.implements = implementsClauses && implementsClauses.types.map(clause => this.resolveHeritage(clause, file));
+        }
     }
 
     handleInterfaceDeclaration(node: ts.InterfaceDeclaration, file: ts.SourceFile) : void {
-        const extendsClause = node.heritageClauses && node.heritageClauses.find(c => c.token === ts.SyntaxKind.ExtendsKeyword);
-        const implementsClause = node.heritageClauses && node.heritageClauses.find(c => c.token === ts.SyntaxKind.ImplementsKeyword);
-        this.currentModule.interfaces.push({
+        const res: InterfaceDecl = {
             name: node.name.text,
-            properties: node.members.map(m => this.resolveProperty(m as ts.PropertySignature, file)),
-            extends: extendsClause && this.resolveHeritage(extendsClause.types[0], file),
-            implements: implementsClause && implementsClause.types.map(impl => this.resolveType(impl, file)),
             start: node.pos,
             end: node.end,
             sourceFile: file.fileName,
+            properties: [],
             jsDoc: this.getJSDocData(node)
-        });
+        };
+        this.currentModule.interfaces.push(res);
+        res.properties = node.members.map(m => this.resolveProperty(m as ts.PropertySignature, file));
+        if (node.heritageClauses) {
+            const extendsClause = node.heritageClauses.find(c => c.token === ts.SyntaxKind.ExtendsKeyword);
+            res.extends = extendsClause && this.resolveHeritage(extendsClause.types[0], file);
+            const implementsClause = node.heritageClauses.find(c => c.token === ts.SyntaxKind.ImplementsKeyword);
+            res.implements = implementsClause && implementsClause.types.map(impl => this.resolveType(impl, file));
+        }
     }
 
     moduleFromFile(file: ts.SourceFile) : Module|undefined {

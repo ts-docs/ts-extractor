@@ -125,8 +125,8 @@ export type Constructor = Omit<ArrowFunction, "kind">
 
 export interface ClassDecl extends PotentiallyNamelessNode {
     typeParameters?: Array<TypeParameter>,
-    properties?: Array<ClassProperty>,
-    methods?: Array<ClassMethod>,
+    properties: Array<ClassProperty>,
+    methods: Array<ClassMethod>,
     extends?: Reference,
     constructor?: Constructor,
     implements?: Array<TypeOrLiteral>,
