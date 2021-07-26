@@ -9,7 +9,6 @@ export interface Module {
     enums: Array<EnumDecl>,
     constants: Array<ConstantDecl>,
     isGlobal?: boolean
-    sourceFile: string
 }
 
 export interface JSDocData {
@@ -33,10 +32,9 @@ export interface PotentiallyNamelessNode {
     jsDoc?: JSDocData
 }
 
-export function createModule(name: string, sourceFile: string, isGlobal?: boolean) : Module {
+export function createModule(name: string, isGlobal?: boolean) : Module {
     return {
         name,
-        sourceFile,
         modules: new Map(),
         classes: [],
         functions: [],

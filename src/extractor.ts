@@ -1,7 +1,6 @@
 
 import {ArrowFunction, ClassMethod, ClassProperty, ConstantDecl, Constructor, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData } from "./structure";
 import * as ts from "typescript";
-import * as path from "path";
 
 export class TypescriptExtractor {
     module: Module
@@ -185,7 +184,7 @@ export class TypescriptExtractor {
         for (const pathPart of paths) {
             const newLastMod = lastModule.modules.get(pathPart);
             if (!newLastMod) {
-                const mod = createModule(pathPart, path.resolve(file.fileName, "../"));
+                const mod = createModule(pathPart);
                 lastModule.modules.set(pathPart, mod);
                 lastModule = mod;
             } else lastModule = newLastMod;
