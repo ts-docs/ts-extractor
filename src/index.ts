@@ -20,6 +20,11 @@ export function extract(rootFiles: Array<string>) : [Array<TypescriptExtractor>,
 
         for (const file of program.getSourceFiles()) {
             if (file.isDeclarationFile) continue;
+            extractor.runPreparerOnFile(file);
+        }
+
+        for (const file of program.getSourceFiles()) {
+            if (file.isDeclarationFile) continue;
             extractor.runOnFile(file);
         }
 
@@ -28,3 +33,5 @@ export function extract(rootFiles: Array<string>) : [Array<TypescriptExtractor>,
 
     return [modules, tsconfig];
 }
+
+console.dir(extract(["./test/src/index.ts"])[0][0].moduleToJSON(), {depth: 100});

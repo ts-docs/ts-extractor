@@ -2,11 +2,11 @@
 export interface Module {
     name: string,
     modules: Map<string, Module>,
-    classes: Array<ClassDecl>,
+    classes: Map<string, ClassDecl>,
     functions: Array<FunctionDecl>,
-    interfaces: Array<InterfaceDecl>,
-    types: Array<TypeDecl>,
-    enums: Array<EnumDecl>,
+    interfaces: Map<string, InterfaceDecl>,
+    types: Map<string, TypeDecl>,
+    enums: Map<string, EnumDecl>,
     constants: Array<ConstantDecl>,
     isGlobal?: boolean
 }
@@ -21,7 +21,8 @@ export interface Node {
     start: number,
     end: number,
     sourceFile?: string,
-    jsDoc?: JSDocData
+    jsDoc?: JSDocData,
+    isExported?: boolean
 }
 
 export interface PotentiallyNamelessNode {
@@ -29,18 +30,19 @@ export interface PotentiallyNamelessNode {
     start: number,
     end: number,
     sourceFile?: string,
-    jsDoc?: JSDocData
+    jsDoc?: JSDocData,
+    isExported?: boolean
 }
 
 export function createModule(name: string, isGlobal?: boolean) : Module {
     return {
         name,
         modules: new Map(),
-        classes: [],
+        classes: new Map(),
         functions: [],
-        interfaces: [],
-        types: [],
-        enums: [],
+        interfaces: new Map(),
+        types: new Map(),
+        enums: new Map(),
         constants: [],
         isGlobal
     };
@@ -67,6 +69,7 @@ export const enum TypeKinds {
     OBJECT_LITERAL,
     TYPE_ALIAS,
     TUPLE,
+    TYPE_PARAMETER,
     UNION
 }
 

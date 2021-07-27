@@ -1,12 +1,15 @@
 
 import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData, InterfaceDecl, ClassDecl } from "./structure";
-import * as ts from "typescript";
+import ts from "typescript";
+
+const EXLUDED_TYPE_REFS = ["Promise", "Array", "Map", "Set", "Function", "unknown"];
 
 export class TypescriptExtractor {
     module: Module
-    references: Map<ts.Symbol, ReferenceType>
+    references: Map<string, ReferenceType>
+    moduleCache: Record<string, Module>
     baseDir: string
-    visitor: (node: ts.Node, file: ts.SourceFile) => void
+    private visitor: (node: ts.Node) => void
     currentModule: Module
     checker: ts.TypeChecker
     constructor(globalModule: Module, baseDir: string, checker: ts.TypeChecker) {
@@ -16,98 +19,118 @@ export class TypescriptExtractor {
         this.baseDir = baseDir;
         this.checker = checker;
         this.visitor = this._visitor.bind(this);
+        this.moduleCache = {};
     }
 
     runOnFile(file: ts.SourceFile) : void {
-        this.currentModule = this.moduleFromFile(file) as unknown as Module;
+        this.currentModule = this.moduleCache[file.fileName];
         for (const stmt of file.statements) {
-            this._visitor(stmt, file);
+            this._visitor(stmt);
         }
     }
 
-    _visitor(node: ts.Node, file: ts.SourceFile) : void {
-        if (!(node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword))) return;
-        if (ts.isVariableStatement(node)) return this.handleVariableDeclaration(node, file);
-        else if (ts.isClassDeclaration(node)) return this.handleClassDeclaration(node, file);
-        else if (ts.isInterfaceDeclaration(node)) return this.handleInterfaceDeclaration(node, file);
-        else if (ts.isEnumDeclaration(node)) return this.handleEnumDeclaration(node, file);
-        else if (ts.isFunctionDeclaration(node)) return this.handleFunctionDeclaration(node, file);
-        else if (ts.isTypeAliasDeclaration(node)) return this.handleTypeDeclaration(node, file);
-        else if (ts.isModuleDeclaration(node)) return ts.forEachChild(node, (child) => this.visitor(child, file));
+    runPreparerOnFile(file: ts.SourceFile) : void {
+        this.currentModule = this.moduleFromFile(file) as Module;
+        this.moduleCache[file.fileName] = this.currentModule;
+        for (const stmt of file.statements) {
+            this._preparer(stmt);
+        }
+    } 
+
+    private _visitor(node: ts.Node) : void {
+        if (ts.isVariableStatement(node) && node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)) return this.handleVariableDeclaration(node);
+        else if (ts.isClassDeclaration(node)) return this.handleClassDeclaration(node);
+        else if (ts.isInterfaceDeclaration(node)) return this.handleInterfaceDeclaration(node);
+        else if (ts.isFunctionDeclaration(node) && node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)) return this.handleFunctionDeclaration(node);
+        else if (ts.isModuleDeclaration(node)) return ts.forEachChild(node, (child) => this.visitor(child));
     }
 
-    handleTypeDeclaration(node: ts.TypeAliasDeclaration, file: ts.SourceFile) : void {
-        this.currentModule.types.push({
-            name: node.name.text,
-            value: this.resolveType(node.type, file),
-            start: node.pos,
-            end: node.end,
-            sourceFile: file.fileName,
-            jsDoc: this.getJSDocData(node)
-        });
+    _preparer(node: ts.Node) : void {
+        const sourceFile = node.getSourceFile().fileName;
+        if (ts.isClassDeclaration(node)) {
+            this.currentModule.classes.set(node.name?.text || "export default", {
+                name: node.name?.text,
+                typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p)),
+                properties: [],
+                methods: [],
+                constructor: undefined,
+                start: node.pos,
+                end: node.end,
+                isAbstract: node.modifiers && node.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
+                sourceFile,
+                jsDoc: this.getJSDocData(node),
+                isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
+            });
+        } else if (ts.isInterfaceDeclaration(node)) {
+            this.currentModule.interfaces.set(node.name.text, {
+                name: node.name.text,
+                start: node.pos,
+                end: node.end,
+                sourceFile,
+                properties: [],
+                jsDoc: this.getJSDocData(node),
+                isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
+            });
+        } else if (ts.isEnumDeclaration(node)) {
+            this.currentModule.enums.set(node.name.text, {
+                name: node.name.text,
+                const: Boolean(node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ConstKeyword)),
+                members: node.members.map(m => ({
+                    name: m.name.getText(),
+                    initializer: m.initializer && m.initializer.getText(),
+                    start: m.pos,
+                    end: m.end,
+                })),
+                start: node.pos,
+                end: node.end,
+                sourceFile,
+                jsDoc: this.getJSDocData(node),
+                isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
+            });
+        } else if (ts.isTypeAliasDeclaration(node)) {
+            this.currentModule.types.set(node.name.text, {
+                name: node.name.text,
+                value: this.resolveType(node.type),
+                start: node.pos,
+                end: node.end,
+                sourceFile,
+                jsDoc: this.getJSDocData(node),
+                isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
+            });
+        }
     }
 
-    handleFunctionDeclaration(node: ts.FunctionDeclaration, file: ts.SourceFile) : void {
+    handleFunctionDeclaration(node: ts.FunctionDeclaration) : void {
         this.currentModule.functions.push({
             name: node.name?.text,
-            parameters: node.parameters.map(p => this.resolveParameter(p, file)),
-            typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p, file)),
-            returnType: node.type && this.resolveType(node.type, file),
+            parameters: node.parameters.map(p => this.resolveParameter(p)),
+            typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p)),
+            returnType: node.type && this.resolveType(node.type),
             start: node.pos,
             end: node.end,
-            sourceFile: file.fileName,
+            sourceFile: node.getSourceFile().fileName,
             jsDoc: this.getJSDocData(node)
         });
     }
 
-    handleVariableDeclaration(node: ts.VariableStatement, file: ts.SourceFile) : void {
+    handleVariableDeclaration(node: ts.VariableStatement) : void {
         const declarations: Array<ConstantDecl> = [];
         for (const declaration of node.declarationList.declarations) {
             if (!declaration.initializer) continue;
             declarations.push({
                 name: declaration.name.getText(),
-                //content: declaration.initializer.getText(file),
                 start: node.pos,
                 end: node.end,
-                type: declaration.type ? this.resolveType(declaration.type, file) : undefined,
-                sourceFile: file.fileName,
+                type: declaration.type ? this.resolveType(declaration.type) : undefined,
+                sourceFile: node.getSourceFile().fileName,
                 jsDoc: this.getJSDocData(node)
             });
         }
         this.currentModule.constants.push(...declarations);
     }
 
-    handleEnumDeclaration(node: ts.EnumDeclaration, file: ts.SourceFile) : void {
-        this.currentModule.enums.push({
-            name: node.name.text,
-            const: Boolean(node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ConstKeyword)),
-            members: node.members.map(m => ({
-                name: m.name.getText(),
-                initializer: m.initializer && m.initializer.getText(),
-                start: m.pos,
-                end: m.end,
-            })),
-            start: node.pos,
-            end: node.end,
-            sourceFile: file.fileName,
-            jsDoc: this.getJSDocData(node)
-        });
-    }
-
-    handleClassDeclaration(node: ts.ClassDeclaration, file: ts.SourceFile) : void {
-        const res: ClassDecl = {
-            name: node.name?.text,
-            typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p, file)),
-            properties: [],
-            methods: [],
-            constructor: undefined,
-            start: node.pos,
-            end: node.end,
-            isAbstract: node.modifiers && node.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
-            sourceFile: file.fileName,
-            jsDoc: this.getJSDocData(node)
-        };
-        this.currentModule.classes.push(res);
+    handleClassDeclaration(node: ts.ClassDeclaration) : void {
+        const res = this.currentModule.classes.get(node.name?.text || "export default") as ClassDecl;
         for (const member of node.members) {
             let isStatic, isPrivate, isProtected, isReadonly, isAbstract;
             if (member.modifiers) {
@@ -122,7 +145,7 @@ export class TypescriptExtractor {
             if (ts.isPropertyDeclaration(member)) {
                 res.properties.push({
                     name: member.name.getText(),
-                    type: member.type && this.resolveType(member.type, file),
+                    type: member.type && this.resolveType(member.type),
                     start: member.pos,
                     isOptional: Boolean(member.questionToken),
                     end: member.end,
@@ -133,9 +156,9 @@ export class TypescriptExtractor {
             else if (ts.isMethodDeclaration(member)) {
                 res.methods.push({
                     name: member.name.getText(),
-                    returnType: member.type && this.resolveType(member.type, file),
-                    typeParameters: member.typeParameters && member.typeParameters.map(p => this.resolveGenerics(p, file)),
-                    parameters: member.parameters.map(p => this.resolveParameter(p, file)),
+                    returnType: member.type && this.resolveType(member.type),
+                    typeParameters: member.typeParameters && member.typeParameters.map(p => this.resolveGenerics(p)),
+                    parameters: member.parameters.map(p => this.resolveParameter(p)),
                     start: member.pos,
                     end: member.end,
                     isPrivate, isProtected, isStatic, isAbstract,
@@ -144,7 +167,7 @@ export class TypescriptExtractor {
             }
             else if (ts.isConstructorDeclaration(member)) {
                 res.constructor = {
-                    parameters: member.parameters.map(p => this.resolveParameter(p, file)),
+                    parameters: member.parameters.map(p => this.resolveParameter(p)),
                     start: member.pos,
                     end: member.pos
                 };
@@ -152,28 +175,20 @@ export class TypescriptExtractor {
         }
         if (node.heritageClauses) {
             const extendsClause = node.heritageClauses.find(clause => clause.token === ts.SyntaxKind.ExtendsKeyword);
-            res.extends = extendsClause && this.resolveHeritage(extendsClause.types[0], file) as Reference;
+            res.extends = extendsClause && this.resolveHeritage(extendsClause.types[0]) as Reference;
             const implementsClauses = node.heritageClauses?.find(clause => clause.token === ts.SyntaxKind.ImplementsKeyword);
-            res.implements = implementsClauses && implementsClauses.types.map(clause => this.resolveHeritage(clause, file));
+            res.implements = implementsClauses && implementsClauses.types.map(clause => this.resolveHeritage(clause));
         }
     }
 
-    handleInterfaceDeclaration(node: ts.InterfaceDeclaration, file: ts.SourceFile) : void {
-        const res: InterfaceDecl = {
-            name: node.name.text,
-            start: node.pos,
-            end: node.end,
-            sourceFile: file.fileName,
-            properties: [],
-            jsDoc: this.getJSDocData(node)
-        };
-        this.currentModule.interfaces.push(res);
-        res.properties = node.members.map(m => this.resolveProperty(m as ts.PropertySignature, file));
+    handleInterfaceDeclaration(node: ts.InterfaceDeclaration) : void {
+        const res = this.currentModule.interfaces.get(node.name.text) as InterfaceDecl;
+        res.properties = node.members.map(m => this.resolveProperty(m as ts.PropertySignature));
         if (node.heritageClauses) {
             const extendsClause = node.heritageClauses.find(c => c.token === ts.SyntaxKind.ExtendsKeyword);
-            res.extends = extendsClause && this.resolveHeritage(extendsClause.types[0], file);
+            res.extends = extendsClause && this.resolveHeritage(extendsClause.types[0]);
             const implementsClause = node.heritageClauses.find(c => c.token === ts.SyntaxKind.ImplementsKeyword);
-            res.implements = implementsClause && implementsClause.types.map(impl => this.resolveType(impl, file));
+            res.implements = implementsClause && implementsClause.types.map(impl => this.resolveType(impl));
         }
     }
 
@@ -216,9 +231,10 @@ export class TypescriptExtractor {
     }
 
     getReferenceTypeFromName(name: string) : ReferenceType {
+        if (EXLUDED_TYPE_REFS.includes(name)) return {name, kind: TypeKinds.UNKNOWN};
         const path: Array<string> = [];
         return this.forEachModule<ReferenceType>(this.module, (module) => {
-            if (module.classes.some(cl => cl.name === name)) {
+            if (module.classes.has(name)) {
                 if (!module.isGlobal) path.push(module.name);
                 return {
                     name,
@@ -226,7 +242,7 @@ export class TypescriptExtractor {
                     kind: TypeKinds.CLASS,
                 };
             }
-            else if (module.interfaces.some(inter => inter.name === name)) {
+            else if (module.interfaces.has(name)) {
                 if (!module.isGlobal) path.push(module.name);
                 return {
                     name,
@@ -234,7 +250,7 @@ export class TypescriptExtractor {
                     kind: TypeKinds.INTERFACE
                 };
             }
-            else if (module.enums.some(en => en.name === name)) {
+            else if (module.enums.has(name)) {
                 if (!module.isGlobal) path.push(module.name);
                 return {
                     name,
@@ -242,7 +258,7 @@ export class TypescriptExtractor {
                     kind: TypeKinds.ENUM
                 };
             }
-            else if (module.types.some(en => en.name === name)) {
+            else if (module.types.has(name)) {
                 if (!module.isGlobal) path.push(module.name);
                 return {
                     name,
@@ -257,36 +273,47 @@ export class TypescriptExtractor {
         });
     }
 
-    resolveType(type: ts.Node, file: ts.SourceFile) : TypeOrLiteral {
+    resolveType(type: ts.Node) : TypeOrLiteral {
         if (ts.isTypeReferenceNode(type)) {
             const symbol = this.checker.getSymbolAtLocation(type.typeName);
-            const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file));
+            const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg));
             if (!symbol) return {
                 type: { name: "Unknown", kind: TypeKinds.UNKNOWN},
+                typeParameters,
+            };
+            if (EXLUDED_TYPE_REFS.includes(symbol.name)) return {
+                type: { name: symbol.name, kind: TypeKinds.UNKNOWN},
                 typeParameters
             };
-            if (this.references.has(symbol)) return {type: this.references.get(symbol) as ReferenceType, typeParameters};
+            if ((symbol.flags & ts.SymbolFlags.TypeParameter) === ts.SymbolFlags.TypeParameter) return {
+                type: { name: symbol.name, kind: TypeKinds.TYPE_PARAMETER},
+                typeParameters
+            };
+            const symbolRef = this.references.get(symbol.name);
+            if (symbolRef) return { type: symbolRef, typeParameters};
+        
             const ref = this.getReferenceTypeFromName(symbol.name);
-            this.references.set(symbol, ref);
+            this.references.set(symbol.name, ref);
             return {type: ref, typeParameters};
+    
         }
         else if (ts.isFunctionTypeNode(type)) {
             return {
-                typeParameters: type.typeParameters && type.typeParameters.map(p => this.resolveGenerics(p, file)),
-                returnType: this.resolveType(type.type, file),
-                parameters: type.parameters.map(p => this.resolveParameter(p, file)),
+                typeParameters: type.typeParameters && type.typeParameters.map(p => this.resolveGenerics(p)),
+                returnType: this.resolveType(type.type),
+                parameters: type.parameters.map(p => this.resolveParameter(p)),
                 kind: TypeKinds.ARROW_FUNCTION
             } as ArrowFunction;
         }
         else if (ts.isTypeLiteralNode(type)) {
             return {
-                properties: type.members.map(p => this.resolveProperty(p as ts.PropertySignature, file)),
+                properties: type.members.map(p => this.resolveProperty(p as ts.PropertySignature)),
                 kind: TypeKinds.OBJECT_LITERAL
             } as ObjectLiteral;
         }
         else if (ts.isUnionTypeNode(type)) {
             return {
-                types: type.types.map(t => this.resolveType(t, file)),
+                types: type.types.map(t => this.resolveType(t)),
                 kind: TypeKinds.UNION,
                 start: type.pos,
                 end: type.end
@@ -294,7 +321,7 @@ export class TypescriptExtractor {
         }
         else if (ts.isTupleTypeNode(type)) {
             return {
-                types: type.elements.map(el => this.resolveType(el, file)),
+                types: type.elements.map(el => this.resolveType(el)),
                 kind: TypeKinds.TUPLE,
                 start: type.pos,
                 end: type.end
@@ -314,46 +341,46 @@ export class TypescriptExtractor {
         }
     }
 
-    resolveGenerics(generic: ts.TypeParameterDeclaration, file: ts.SourceFile) : TypeParameter {
+    resolveGenerics(generic: ts.TypeParameterDeclaration) : TypeParameter {
         return {
             name: generic.name.text,
-            default: generic.default ? this.resolveType(generic.default, file) : undefined,
-            constraint: generic.constraint ? this.resolveType(generic.constraint, file) : undefined
+            default: generic.default ? this.resolveType(generic.default) : undefined,
+            constraint: generic.constraint ? this.resolveType(generic.constraint) : undefined
         } as TypeParameter;
     }
 
-    resolveParameter(param: ts.ParameterDeclaration, file: ts.SourceFile) : FunctionParameter {
+    resolveParameter(param: ts.ParameterDeclaration) : FunctionParameter {
         return {
             name: param.name.getText(),
             isOptional: Boolean(param.questionToken),
             rest: Boolean(param.dotDotDotToken),
-            type: param.type && this.resolveType(param.type, file),
+            type: param.type && this.resolveType(param.type),
             start: param.pos,
             end: param.end,
             jsDoc: { comment: this.getJSDocCommentOfParam(param) }
         };
     }
 
-    resolveHeritage(param: ts.ExpressionWithTypeArguments, file: ts.SourceFile) : TypeOrLiteral {
+    resolveHeritage(param: ts.ExpressionWithTypeArguments) : TypeOrLiteral {
         const symbol = this.checker.getSymbolAtLocation(param.expression);
-        if (!symbol || !this.references.has(symbol)) return {
+        if (!ts.isIdentifier(param.expression) || !symbol || !this.references.has(symbol.name)) return {
             type: {
                 name: param.expression.getText(),
                 kind: TypeKinds.STRINGIFIED
             },
-            typeParameters: param.typeArguments?.map(arg => this.resolveType(arg, file))
+            typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))
         };
         return {
-            type: this.references.get(symbol) as TypeOrLiteral,
-            typeParameters: param.typeArguments?.map(arg => this.resolveType(arg, file))
+            type: this.references.get(symbol.name) as TypeOrLiteral,
+            typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))
         } as Reference;
     }
     
 
-    resolveProperty(prop: ts.TypeElement, file: ts.SourceFile) : InterfaceProperty|IndexSignatureDeclaration {
+    resolveProperty(prop: ts.TypeElement) : InterfaceProperty|IndexSignatureDeclaration {
         if (ts.isPropertySignature(prop)) return {
             name: prop.name.getText(),
-            type: prop.type && this.resolveType(prop.type, file),
+            type: prop.type && this.resolveType(prop.type),
             isOptional: Boolean(prop.questionToken),
             isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword),
             start: prop.pos,
@@ -362,8 +389,8 @@ export class TypescriptExtractor {
         else {
             const param = (prop as ts.IndexSignatureDeclaration).parameters[0];
             return {
-                key: param.type && this.resolveType(param.type, file),
-                type: this.resolveType((prop as ts.IndexSignatureDeclaration).type, file),
+                key: param.type && this.resolveType(param.type),
+                type: this.resolveType((prop as ts.IndexSignatureDeclaration).type),
                 start: prop.pos,
                 end: prop.end
             } as IndexSignatureDeclaration;
@@ -394,9 +421,13 @@ export class TypescriptExtractor {
         };
     }
     
-    moduleToJSON(module: Module) : Record<string, unknown> {
+    moduleToJSON(module = this.module) : Record<string, unknown> {
         const clone: Record<string, unknown> = {...module};
         clone.modules = [];
+        clone.classes = [...module.classes.values()];
+        clone.interfaces = [...module.interfaces.values()];
+        clone.types = [...module.types.values()];
+        clone.enums = [...module.enums.values()];
         for (const [, mod] of module.modules) {
             (clone.modules as Array<Record<string, unknown>>).push(this.moduleToJSON(mod));
         }
