@@ -2,11 +2,11 @@
 import ts from "typescript";
 import path from "path";
 import { TypescriptExtractor } from "./extractor";
-import { createModule, Module } from "./structure";
+import { createModule } from "./structure";
 import { findTSConfig, getAllButLastItemFromPath, getLastItemFromPath } from "./util";
 
 
-export function extract(rootFiles: Array<string>) : [Array<Module>, ts.CompilerOptions] {
+export function extract(rootFiles: Array<string>) : [Array<TypescriptExtractor>, ts.CompilerOptions] {
     const tsconfig = findTSConfig();
     if (!tsconfig) throw new Error("Couldn't find tsconfig.json");
 
@@ -23,7 +23,7 @@ export function extract(rootFiles: Array<string>) : [Array<Module>, ts.CompilerO
             extractor.runOnFile(file);
         }
 
-        modules.push(extractor.module);
+        modules.push(extractor);
     }
 
     return [modules, tsconfig];

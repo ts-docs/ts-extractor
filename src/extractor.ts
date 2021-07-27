@@ -4,8 +4,7 @@ import * as ts from "typescript";
 
 export class TypescriptExtractor {
     module: Module
-    referencesNames: Map<string, ReferenceType>
-    referencesSymbols: Map<ts.Symbol, ReferenceType>
+    references: Map<ts.Symbol, ReferenceType>
     baseDir: string
     visitor: (node: ts.Node, file: ts.SourceFile) => void
     currentModule: Module
@@ -13,8 +12,7 @@ export class TypescriptExtractor {
     constructor(globalModule: Module, baseDir: string, checker: ts.TypeChecker) {
         this.module = globalModule;
         this.currentModule = this.module;
-        this.referencesNames = new Map();
-        this.referencesSymbols = new Map();
+        this.references = new Map();
         this.baseDir = baseDir;
         this.checker = checker;
         this.visitor = this._visitor.bind(this);
@@ -206,6 +204,17 @@ export class TypescriptExtractor {
         return final;
     } 
 
+    getModuleFromPath(path: Array<string>) : Module|undefined {
+        const pathLen = path.length;
+        if (!pathLen) return this.module;
+        let module: Module|undefined = this.module;
+        for (let i=0; i < pathLen; i++) {
+            if (!module) return undefined;
+            module = module.modules.get(path[i]);
+        }
+        return module;
+    }
+
     getReferenceTypeFromName(name: string) : ReferenceType {
         const path: Array<string> = [];
         return this.forEachModule<ReferenceType>(this.module, (module) => {
@@ -250,18 +259,15 @@ export class TypescriptExtractor {
 
     resolveType(type: ts.Node, file: ts.SourceFile) : TypeOrLiteral {
         if (ts.isTypeReferenceNode(type)) {
-            const name = type.typeName.getText();
             const symbol = this.checker.getSymbolAtLocation(type.typeName);
             const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg, file));
             if (!symbol) return {
                 type: { name: "Unknown", kind: TypeKinds.UNKNOWN},
                 typeParameters
             };
-            if (this.referencesSymbols.has(symbol)) return {type: this.referencesSymbols.get(symbol) as ReferenceType, typeParameters};
-            if (this.referencesNames.has(name)) return {type: this.referencesNames.get(name) as ReferenceType, typeParameters};
-            const ref = this.getReferenceTypeFromName(name);
-            this.referencesNames.set(name, ref);
-            this.referencesSymbols.set(symbol, ref);
+            if (this.references.has(symbol)) return {type: this.references.get(symbol) as ReferenceType, typeParameters};
+            const ref = this.getReferenceTypeFromName(symbol.name);
+            this.references.set(symbol, ref);
             return {type: ref, typeParameters};
         }
         else if (ts.isFunctionTypeNode(type)) {
@@ -329,21 +335,18 @@ export class TypescriptExtractor {
     }
 
     resolveHeritage(param: ts.ExpressionWithTypeArguments, file: ts.SourceFile) : TypeOrLiteral {
-        if (ts.isIdentifier(param.expression)) {
-            const name = param.expression.text;
-            if (this.referencesNames.has(name)) return this.referencesNames.get(name) as TypeOrLiteral;
-            return {
-                type: this.getReferenceTypeFromName(name),
-                typeParameters: param.typeArguments?.map(arg => this.resolveType(arg, file))
-            };
-        }
-        return {
+        const symbol = this.checker.getSymbolAtLocation(param.expression);
+        if (!symbol || !this.references.has(symbol)) return {
             type: {
                 name: param.expression.getText(),
                 kind: TypeKinds.STRINGIFIED
             },
             typeParameters: param.typeArguments?.map(arg => this.resolveType(arg, file))
         };
+        return {
+            type: this.references.get(symbol) as TypeOrLiteral,
+            typeParameters: param.typeArguments?.map(arg => this.resolveType(arg, file))
+        } as Reference;
     }
     
 
@@ -389,6 +392,15 @@ export class TypescriptExtractor {
             comment: jsDoc.map(doc => ts.getTextOfJSDocComment(doc.comment)).join("\n"),
             tags
         };
+    }
+    
+    moduleToJSON(module: Module) : Record<string, unknown> {
+        const clone: Record<string, unknown> = {...module};
+        clone.modules = [];
+        for (const [, mod] of module.modules) {
+            (clone.modules as Array<Record<string, unknown>>).push(this.moduleToJSON(mod));
+        }
+        return clone;
     }
 
 } 
