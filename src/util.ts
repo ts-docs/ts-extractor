@@ -10,6 +10,14 @@ export function getAllButLastItemFromPath(path: string) : string {
     return path.substring(0, path.lastIndexOf("\\"));
 }
 
+export function getBeforePath(path: string, thing: string) : string {
+    const spliced = path.split("\\");
+    for (let i=0; i < spliced.length; i++) {
+        if (spliced[i] === thing) return spliced.slice(0, i).join("\\"); 
+    }
+    return "";
+}
+
 export function findTSConfig(basePath = process.cwd()) : ts.CompilerOptions|undefined {
     const allThings = fs.readdirSync(basePath, { withFileTypes: true});
     const files = allThings.filter(thing => thing.isFile());

@@ -1,8 +1,10 @@
 
-import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData, InterfaceDecl, ClassDecl } from "./structure";
+import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData, InterfaceDecl, ClassDecl, TypeDecl } from "./structure";
 import ts from "typescript";
 
-const EXLUDED_TYPE_REFS = ["Promise", "Array", "Map", "Set", "Function", "unknown"];
+const EXLUDED_TYPE_REFS = ["Promise", "Array", "Map", "Set", "Function", "unknown", "Record", "Omit"];
+
+export type CrossReferenceGetter = (name: string) => ReferenceType|undefined;
 
 export class TypescriptExtractor {
     module: Module
@@ -12,13 +14,15 @@ export class TypescriptExtractor {
     private visitor: (node: ts.Node) => void
     currentModule: Module
     checker: ts.TypeChecker
-    constructor(globalModule: Module, baseDir: string, checker: ts.TypeChecker) {
+    private crossReferenceGetter: CrossReferenceGetter
+    constructor(globalModule: Module, baseDir: string, checker: ts.TypeChecker, crossReferenceGetter: CrossReferenceGetter) {
         this.module = globalModule;
         this.currentModule = this.module;
         this.references = new Map();
         this.baseDir = baseDir;
-        this.checker = checker;
         this.visitor = this._visitor.bind(this);
+        this.checker = checker;
+        this.crossReferenceGetter = crossReferenceGetter;
         this.moduleCache = {};
     }
 
@@ -42,6 +46,7 @@ export class TypescriptExtractor {
         else if (ts.isClassDeclaration(node)) return this.handleClassDeclaration(node);
         else if (ts.isInterfaceDeclaration(node)) return this.handleInterfaceDeclaration(node);
         else if (ts.isFunctionDeclaration(node) && node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)) return this.handleFunctionDeclaration(node);
+        else if (ts.isTypeAliasDeclaration(node)) return this.handleTypeDeclaration(node);
         else if (ts.isModuleDeclaration(node)) return ts.forEachChild(node, (child) => this.visitor(child));
     }
 
@@ -90,7 +95,6 @@ export class TypescriptExtractor {
         } else if (ts.isTypeAliasDeclaration(node)) {
             this.currentModule.types.set(node.name.text, {
                 name: node.name.text,
-                value: this.resolveType(node.type),
                 start: node.pos,
                 end: node.end,
                 sourceFile,
@@ -98,6 +102,11 @@ export class TypescriptExtractor {
                 isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
             });
         }
+    }
+
+    handleTypeDeclaration(node: ts.TypeAliasDeclaration) : void {
+        const decl = this.currentModule.types.get(node.name.text) as TypeDecl;
+        decl.value = this.resolveType(node.type);
     }
 
     handleFunctionDeclaration(node: ts.FunctionDeclaration) : void {
@@ -209,14 +218,14 @@ export class TypescriptExtractor {
         return lastModule;
     }
 
-    forEachModule<R>(module: Module, cb: (module: Module) => R|undefined, final: R) : R {
+    forEachModule<R>(module: Module, cb: (module: Module) => R|undefined) : R|undefined {
         const firstCb = cb(module);
         if (firstCb) return firstCb;
         for (const [, mod] of module.modules) {
-            const res = this.forEachModule(mod, cb, final);
+            const res = this.forEachModule(mod, cb);
             if (res) return res;
         }
-        return final;
+        return undefined;
     } 
 
     getModuleFromPath(path: Array<string>) : Module|undefined {
@@ -230,7 +239,7 @@ export class TypescriptExtractor {
         return module;
     }
 
-    getReferenceTypeFromName(name: string) : ReferenceType {
+    getReferenceTypeFromName(name: string) : ReferenceType|undefined {
         if (EXLUDED_TYPE_REFS.includes(name)) return {name, kind: TypeKinds.UNKNOWN};
         const path: Array<string> = [];
         return this.forEachModule<ReferenceType>(this.module, (module) => {
@@ -266,10 +275,7 @@ export class TypescriptExtractor {
                     kind: TypeKinds.TYPE_ALIAS
                 };
             }
-            else return undefined;
-        }, {
-            name,
-            kind: TypeKinds.UNKNOWN
+            else return this.crossReferenceGetter(name);
         });
     }
 
@@ -292,7 +298,7 @@ export class TypescriptExtractor {
             const symbolRef = this.references.get(symbol.name);
             if (symbolRef) return { type: symbolRef, typeParameters};
         
-            const ref = this.getReferenceTypeFromName(symbol.name);
+            const ref = this.getReferenceTypeFromName(symbol.name) || { name: symbol.name, kind: TypeKinds.UNKNOWN };
             this.references.set(symbol.name, ref);
             return {type: ref, typeParameters};
     
@@ -337,6 +343,8 @@ export class TypescriptExtractor {
         case ts.SyntaxKind.NullKeyword: return { name: "null", kind: TypeKinds.NULL};
         case ts.SyntaxKind.VoidKeyword: return { name: "void", kind: TypeKinds.VOID };
         case ts.SyntaxKind.AnyKeyword: return { name: "any", kind: TypeKinds.ANY };
+        case ts.SyntaxKind.StringLiteral: return { name: type.getText(), kind: TypeKinds.STRING_LITERAL};
+        case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL};
         default: return {name: "unknown", kind: TypeKinds.UNKNOWN};
         }
     }
@@ -362,8 +370,7 @@ export class TypescriptExtractor {
     }
 
     resolveHeritage(param: ts.ExpressionWithTypeArguments) : TypeOrLiteral {
-        const symbol = this.checker.getSymbolAtLocation(param.expression);
-        if (!ts.isIdentifier(param.expression) || !symbol || !this.references.has(symbol.name)) return {
+        if (!ts.isIdentifier(param.expression) || !this.references.has(param.expression.text)) return {
             type: {
                 name: param.expression.getText(),
                 kind: TypeKinds.STRINGIFIED
@@ -371,7 +378,7 @@ export class TypescriptExtractor {
             typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))
         };
         return {
-            type: this.references.get(symbol.name) as TypeOrLiteral,
+            type: this.references.get(param.expression.text) as TypeOrLiteral,
             typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))
         } as Reference;
     }
@@ -432,6 +439,10 @@ export class TypescriptExtractor {
             (clone.modules as Array<Record<string, unknown>>).push(this.moduleToJSON(mod));
         }
         return clone;
+    }
+
+    toJSON() : Record<string, unknown> {
+        return this.moduleToJSON();
     }
 
 } 

@@ -70,12 +70,15 @@ export const enum TypeKinds {
     TYPE_ALIAS,
     TUPLE,
     TYPE_PARAMETER,
+    STRING_LITERAL,
+    NUMBER_LITERAL,
     UNION
 }
 
 export interface ReferenceType {
     name: string,
     path?: Array<string>,
+    external?: string,
     kind: TypeKinds
 }
 
@@ -182,7 +185,7 @@ export interface InterfaceDecl extends Node {
 }
 
 export interface TypeDecl extends Node {
-    value: TypeOrLiteral
+    value?: TypeOrLiteral
 }
 
 export interface ConstantDecl extends Node {

@@ -10,13 +10,21 @@ export function extract(rootFiles: Array<string>) : [Array<TypescriptExtractor>,
     const tsconfig = findTSConfig();
     if (!tsconfig) throw new Error("Couldn't find tsconfig.json");
 
-    const modules = [];
+    const modules: Array<TypescriptExtractor> = [];
 
     for (const rootFile of rootFiles) {
         const globalModule = createModule("Global", true);
         const fullPath = path.join(process.cwd(), rootFile);
         const program = ts.createProgram([fullPath], tsconfig);
-        const extractor = new TypescriptExtractor(globalModule, getLastItemFromPath(getAllButLastItemFromPath(fullPath)), program.getTypeChecker());
+        const extractor: TypescriptExtractor = new TypescriptExtractor(globalModule, getLastItemFromPath(getAllButLastItemFromPath(fullPath)), program.getTypeChecker(), (name) => {
+            if (!modules.length) return undefined;
+            for (const mod of modules) {
+                if (mod === extractor) continue;
+                const ref = mod.getReferenceTypeFromName(name);
+                if (ref) return {...ref, external: mod.baseDir};
+            }
+            return undefined;
+        });
 
         for (const file of program.getSourceFiles()) {
             if (file.isDeclarationFile) continue;
@@ -34,4 +42,4 @@ export function extract(rootFiles: Array<string>) : [Array<TypescriptExtractor>,
     return [modules, tsconfig];
 }
 
-console.dir(extract(["./test/src/index.ts"])[0][0].moduleToJSON(), {depth: 100});
+//console.dir(extract(["./src/index.ts"])[0].moduleToJSON(), {depth: 100});
