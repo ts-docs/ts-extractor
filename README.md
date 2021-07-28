@@ -6,7 +6,9 @@ Extracts stuff like modules, classes, interfaces and enums from typescript proje
 
 - **Clear project structure** - A project is made up of modules, and a "module" is basically a folder. Modules can contain other modules (sub-folders), or exported classes, interfaces, enums, functions, constants and types from each file inside the folder.
 
-- **References** - Every type reference provides a **path** which leads to the module it's declared in, which allows for super easy and painless liking. 
+- **References** - Every type reference provides a **path** which leads to the module it's declared in, which allows for super easy and painless linking. 
+
+- **Monorepo support** - Bundle types from all projects in the monorepo, creating external references.
 
 ## Usage
 
@@ -32,7 +34,7 @@ export interface TestInterface {
 
 const [extractor] = extract(["./index.ts"]);
 
-console.dir(extractor.module, {depth: 10});
+console.dir(extractor[0].module, {depth: 10});
 ```
 
 Logs:

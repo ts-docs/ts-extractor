@@ -284,7 +284,7 @@ export class TypescriptExtractor {
             const symbol = this.checker.getSymbolAtLocation(type.typeName);
             const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg));
             if (!symbol) return {
-                type: { name: "Unknown", kind: TypeKinds.UNKNOWN},
+                type: { name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN},
                 typeParameters,
             };
             if (EXLUDED_TYPE_REFS.includes(symbol.name)) return {
@@ -301,7 +301,14 @@ export class TypescriptExtractor {
             const ref = this.getReferenceTypeFromName(symbol.name) || { name: symbol.name, kind: TypeKinds.UNKNOWN };
             this.references.set(symbol.name, ref);
             return {type: ref, typeParameters};
-    
+        }
+        else if (ts.isIdentifier(type)) {
+            const name = type.text;
+            const symbolRef = this.references.get(name);
+            if (symbolRef) return {type: symbolRef};
+            const ref = this.getReferenceTypeFromName(name) || { name, kind: TypeKinds.UNKNOWN };
+            this.references.set(name, ref);
+            return { type: ref };
         }
         else if (ts.isFunctionTypeNode(type)) {
             return {
@@ -325,6 +332,14 @@ export class TypescriptExtractor {
                 end: type.end
             };
         }
+        else if (ts.isIntersectionTypeNode(type)) {
+            return {
+                types: type.types.map(t => this.resolveType(t)),
+                kind: TypeKinds.INTERSECTION,
+                start: type.pos,
+                end: type.end
+            };
+        }
         else if (ts.isTupleTypeNode(type)) {
             return {
                 types: type.elements.map(el => this.resolveType(el)),
@@ -343,9 +358,7 @@ export class TypescriptExtractor {
         case ts.SyntaxKind.NullKeyword: return { name: "null", kind: TypeKinds.NULL};
         case ts.SyntaxKind.VoidKeyword: return { name: "void", kind: TypeKinds.VOID };
         case ts.SyntaxKind.AnyKeyword: return { name: "any", kind: TypeKinds.ANY };
-        case ts.SyntaxKind.StringLiteral: return { name: type.getText(), kind: TypeKinds.STRING_LITERAL};
-        case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL};
-        default: return {name: "unknown", kind: TypeKinds.UNKNOWN};
+        default: return {name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
         }
     }
 
@@ -370,15 +383,15 @@ export class TypescriptExtractor {
     }
 
     resolveHeritage(param: ts.ExpressionWithTypeArguments) : TypeOrLiteral {
-        if (!ts.isIdentifier(param.expression) || !this.references.has(param.expression.text)) return {
+        if (!ts.isIdentifier(param.expression)) return {
             type: {
                 name: param.expression.getText(),
-                kind: TypeKinds.STRINGIFIED
+                kind: TypeKinds.STRINGIFIED_UNKNOWN
             },
             typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))
         };
         return {
-            type: this.references.get(param.expression.text) as TypeOrLiteral,
+            type: this.resolveType(param.expression),
             typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))
         } as Reference;
     }

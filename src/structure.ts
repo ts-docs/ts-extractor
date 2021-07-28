@@ -63,16 +63,15 @@ export const enum TypeKinds {
     UNDEFINED,
     NULL,
     ANY,
-    STRINGIFIED,
+    STRINGIFIED_UNKNOWN,
     UNKNOWN,
     ARROW_FUNCTION,
     OBJECT_LITERAL,
     TYPE_ALIAS,
     TUPLE,
     TYPE_PARAMETER,
-    STRING_LITERAL,
-    NUMBER_LITERAL,
-    UNION
+    UNION,
+    INTERSECTION
 }
 
 export interface ReferenceType {
@@ -92,7 +91,7 @@ export interface Literal {
     kind: TypeKinds
 }
 
-export type TypeOrLiteral = Reference | ObjectLiteral | ArrowFunction | Union | Literal;
+export type TypeOrLiteral = Reference | ObjectLiteral | ArrowFunction | UnionOrIntersection | Literal;
 
 export interface TypeParameter extends Node {
     default?: TypeOrLiteral,
@@ -162,7 +161,7 @@ export interface ObjectLiteral extends Omit<Node, "name">  {
     kind: TypeKinds
 }
 
-export interface Union extends Omit<Node, "name"> {
+export interface UnionOrIntersection extends Omit<Node, "name"> {
     types: Array<TypeOrLiteral>,
     kind: TypeKinds
 }
