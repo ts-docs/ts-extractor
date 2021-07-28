@@ -10,14 +10,8 @@ export function getAllButLastItemFromPath(path: string) : string {
     return path.substring(0, path.lastIndexOf("\\"));
 }
 
-export function getBeforePath(path: string, thing: string) : string {
-    const spliced = path.split("\\");
-    for (let i=0; i < spliced.length; i++) {
-        if (spliced[i] === thing) return spliced.slice(0, i).join("\\"); 
-    }
-    return "";
-}
 
+/** Goes down */
 export function findTSConfig(basePath = process.cwd()) : ts.CompilerOptions|undefined {
     const allThings = fs.readdirSync(basePath, { withFileTypes: true});
     const files = allThings.filter(thing => thing.isFile());
@@ -34,4 +28,13 @@ export function findTSConfig(basePath = process.cwd()) : ts.CompilerOptions|unde
         if (res) return res;
     }
     return undefined;
+}
+
+/** Goes up */
+export function findPackageJSON(basePath: string) : Record<string, string>|undefined {
+    const pathToJson = path.join(basePath, "package.json");
+    if (fs.existsSync(pathToJson)) return JSON.parse(fs.readFileSync(pathToJson, "utf-8"));
+    const newPath = path.join(basePath, "../");
+    if (newPath === basePath) return undefined;
+    return findPackageJSON(newPath);
 }
