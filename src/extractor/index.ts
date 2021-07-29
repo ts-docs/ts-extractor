@@ -267,8 +267,15 @@ export class TypescriptExtractor {
         });
     }
 
-    resolveType(type: ts.Node) : TypeOrLiteral {
-        if (ts.isTypeReferenceNode(type)) {
+    resolveType(type: ts.Node|string) : TypeOrLiteral {
+        if (typeof type === "string") {
+            const symbolRef = this.references.get(type);
+            if (symbolRef) return {type: symbolRef};
+            const ref = this.getReferenceTypeFromName(type) || { name: type, kind: TypeKinds.UNKNOWN };
+            this.references.set(type, ref);
+            return { type: ref };
+        }
+        else if (ts.isTypeReferenceNode(type)) {
             const symbol = this.checker.getSymbolAtLocation(type.typeName);
             const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg));
             if (!symbol) return {
@@ -330,6 +337,35 @@ export class TypescriptExtractor {
                 kind: TypeKinds.TUPLE
             };
         }
+        else if (ts.isTypeOperatorNode(type)) {
+            let kind;
+            switch (type.operator) {
+                case ts.SyntaxKind.UniqueKeyword:
+                    kind = TypeKinds.UNIQUE_OPERATOR;
+                    break;
+                case ts.SyntaxKind.KeyOfKeyword:
+                    kind = TypeKinds.KEYOF_OPERATOR;
+                    break;
+                case ts.SyntaxKind.ReadonlyKeyword:
+                    kind = TypeKinds.READONLY_OPERATOR;
+            }
+            return {
+                kind,
+                type: this.resolveType(type.type)
+            }
+        }
+        else if (ts.isArrayTypeNode(type)) {
+            return {
+                type: this.resolveType(type.elementType),
+                kind: TypeKinds.ARRAY_TYPE
+            }
+        }
+        else if (ts.isParenthesizedTypeNode(type)) return this.resolveType(type.type);
+        else if (ts.isThisTypeNode(type)) {
+            const symbol = this.checker.getSymbolAtLocation(type);
+            if (!symbol) return { name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };;
+            return this.resolveType(symbol.name);
+        }
         else switch (type.kind) {
         case ts.SyntaxKind.NumberKeyword: return {name: "number", kind: TypeKinds.NUMBER};
         case ts.SyntaxKind.StringKeyword: return {name: "string", kind: TypeKinds.STRING};
@@ -371,7 +407,7 @@ export class TypescriptExtractor {
             typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))
         };
         return {
-            type: this.resolveType(param.expression),
+            type: this.resolveType(param.expression.text),
             typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))
         } as Reference;
     }

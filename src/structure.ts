@@ -72,6 +72,10 @@ export const enum TypeKinds {
     TUPLE,
     TYPE_PARAMETER,
     UNION,
+    UNIQUE_OPERATOR,
+    READONLY_OPERATOR,
+    KEYOF_OPERATOR,
+    ARRAY_TYPE,
     INTERSECTION
 }
 
@@ -87,12 +91,15 @@ export interface Reference {
     typeParameters?: Array<TypeOrLiteral>
 }
 
-export interface Literal {
-    name: string,
+export interface Type {
     kind: TypeKinds
 }
 
-export type TypeOrLiteral = Reference | ObjectLiteral | ArrowFunction | UnionOrIntersection | Literal;
+export interface Literal extends Type {
+    name: string
+}
+
+export type TypeOrLiteral = Reference | ObjectLiteral | ArrowFunction | UnionOrIntersection | Literal | TypeOperator | ArrayType;
 
 export interface TypeParameter extends Node {
     default?: TypeOrLiteral,
@@ -147,11 +154,11 @@ export interface FunctionDecl extends PotentiallyNamelessNode {
     parameters: Array<FunctionParameter>
 }
 
-export interface ArrowFunction {
+// (...parameters) => returnValue
+export interface ArrowFunction extends Type {
     typeParameters?: Array<TypeParameter>,
     returnType?: TypeOrLiteral,
-    parameters?: Array<FunctionParameter>,
-    kind: TypeKinds
+    parameters?: Array<FunctionParameter>
 }
 
 export interface IndexSignatureDeclaration {
@@ -159,19 +166,29 @@ export interface IndexSignatureDeclaration {
     type: TypeOrLiteral
 }
 
-export interface ObjectLiteral  {
+// { a: type }
+export interface ObjectLiteral extends Type {
     properties: Array<InterfaceProperty|IndexSignatureDeclaration>,
-    kind: TypeKinds
 }
 
-export interface UnionOrIntersection {
-    types: Array<TypeOrLiteral>,
-    kind: TypeKinds
+// a | b , a & b
+export interface UnionOrIntersection  extends Type {
+    types: Array<TypeOrLiteral>
 }
 
-export interface Tuple {
+// keyof a, unqiue a, readonly a
+export interface TypeOperator extends Type {
+    type: TypeOrLiteral
+}
+
+// [a, b, c]
+export interface Tuple extends Type {
     types: Array<TypeOrLiteral>,
-    kind: TypeKinds
+}
+
+// a[]
+export interface ArrayType extends Type {
+    type: TypeOrLiteral
 }
 
 export interface InterfaceProperty {
