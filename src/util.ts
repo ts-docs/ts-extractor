@@ -62,3 +62,7 @@ export function getRepository(packageJSON: PackageJSON) : string|undefined {
 export function getBranchName(path: string) : string|undefined {
     return execSync(`cd ${path} && git rev-parse --abbrev-ref HEAD`).slice(0, -1).toString("utf-8");
 }
+
+export function hasBit(num: number, bit: number) : boolean {
+    return (num & bit) === num;
+}

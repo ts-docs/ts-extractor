@@ -10,7 +10,8 @@ export interface Module {
     enums: Map<string, EnumDecl>,
     constants: Array<ConstantDecl>,
     repository?: string,
-    isGlobal?: boolean
+    isGlobal?: boolean,
+    isNamespace?: boolean
 }
 
 export interface JSDocData {
@@ -18,23 +19,33 @@ export interface JSDocData {
     comment?: string
 }
 
+export interface Loc {
+    pos: ts.LineAndCharacter,
+    sourceFile?: string
+}
+
 export interface Node {
     name: string,
-    pos: ts.LineAndCharacter,
-    sourceFile?: string,
+    loc: Loc
     jsDoc?: JSDocData,
     isExported?: boolean
 }
 
-export interface PotentiallyNamelessNode {
+export type PotentiallyNamelessNode = {
     name?: string,
-    pos: ts.LineAndCharacter,
-    sourceFile?: string,
+    loc: Loc
     jsDoc?: JSDocData,
     isExported?: boolean
+};
+
+export type NodeWithManyLOC = {
+    name?: string,
+    jsDoc?: JSDocData,
+    isExported?: boolean
+    loc: Array<Loc>
 }
 
-export function createModule(name: string, isGlobal?: boolean, repository?: string) : Module {
+export function createModule(name: string, isGlobal?: boolean, repository?: string, isNamespace?: boolean) : Module {
     return {
         name,
         repository,
@@ -45,7 +56,8 @@ export function createModule(name: string, isGlobal?: boolean, repository?: stri
         types: new Map(),
         enums: new Map(),
         constants: [],
-        isGlobal
+        isGlobal,
+        isNamespace
     };
 }
 
@@ -78,6 +90,7 @@ export const enum TypeKinds {
     ARRAY_TYPE,
     INTERSECTION
 }
+
 
 export interface ReferenceType {
     name: string,
@@ -198,7 +211,7 @@ export interface InterfaceProperty {
     isOptional: boolean
 }
 
-export interface InterfaceDecl extends Node {
+export interface InterfaceDecl extends NodeWithManyLOC {
     properties: Array<InterfaceProperty|IndexSignatureDeclaration>,
     extends?: TypeOrLiteral,
     implements?: Array<TypeOrLiteral>
@@ -217,7 +230,7 @@ export interface EnumMember extends Node {
     initializer?: string
 }
 
-export interface EnumDecl extends Node {
+export interface EnumDecl extends NodeWithManyLOC {
     members: Array<EnumMember>
     const: boolean
 }

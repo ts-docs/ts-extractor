@@ -12,17 +12,30 @@ export class ExtractorList extends Array<TypescriptExtractor> {
         const lastItem = getLastItemFromPath(getAllButLastItemFromPath(fullPath));
         const repo = getRepository(packageJSONData);
         const module = createModule(packageJSONData.contents.name, true, repo && `${repo}/${lastItem}`);
-        const extractor: TypescriptExtractor = new TypescriptExtractor(module, lastItem, repo, typeChecker, (name) => {
-            if (!this.length) return undefined;
-            for (const mod of this) {
-                if (mod === extractor) return undefined;
-                const ref = mod.getReferenceTypeFromName(name);
-                if (ref) return {...ref, external: mod.module.name};
+        const extractor: TypescriptExtractor = new TypescriptExtractor(module, lastItem, repo, typeChecker, {
+            resolveSymbol: (symbol) => {
+                for (const mod of this) {
+                    if (mod === extractor) return undefined;
+                    const ref = mod.getReferenceTypeFromSymbol(symbol);
+                    if (ref) return {...ref, external: mod.module.name};
+                }
+                return undefined;
+            },
+            getReference: (symbol) => {
+                for (const mod of this) {
+                    if (mod === extractor) return undefined;
+                    const ref = mod.references.get(symbol.name);
+                    if (ref) return { ...ref, external: mod.module.name }
+                }
+                return undefined;
             }
-            return undefined;
         });
         this.push(extractor);
         return extractor;
+    }
+
+    toJSON() : Array<Record<string, unknown>> {
+        return this.map(ext => ext.toJSON());
     }
 
 }

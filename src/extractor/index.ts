@@ -1,32 +1,36 @@
 
-import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData, InterfaceDecl, ClassDecl, TypeDecl } from "../structure";
+import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData, InterfaceDecl, ClassDecl, TypeDecl, Loc } from "../structure";
 import ts from "typescript";
-import { getLastItemFromPath } from "../util";
+import { getLastItemFromPath, hasBit } from "../util";
 
 const EXLUDED_TYPE_REFS = ["Promise", "Array", "Map", "Set", "Function", "unknown", "Record", "Omit"];
 
-export type CrossReferenceGetter = (name: string) => ReferenceType|undefined;
+
+export interface TypescriptExtractorHooks {
+    getReference: (symbol: ts.Symbol) => ReferenceType|undefined,
+    resolveSymbol: (symbol: ts.Symbol) => ReferenceType|undefined
+}
 
 export class TypescriptExtractor {
     module: Module
     references: Map<string, ReferenceType>
-    moduleCache: Record<string, Module>
     baseDir: string
-    private visitor: (node: ts.Node) => void
     currentModule: Module
     checker: ts.TypeChecker
     repository?: string
-    private crossReferenceGetter: CrossReferenceGetter
-    constructor(globalModule: Module, baseDir: string, reposiotry: string|undefined, checker: ts.TypeChecker, crossReferenceGetter: CrossReferenceGetter) {
+    private moduleCache: Record<string, Module>
+    private hooks: TypescriptExtractorHooks
+    private namespaceCache: Record<string, Module>
+    constructor(globalModule: Module, baseDir: string, reposiotry: string|undefined, checker: ts.TypeChecker, hooks: TypescriptExtractorHooks) {
         this.module = globalModule;
         this.currentModule = this.module;
         this.references = new Map();
         this.baseDir = baseDir;
-        this.visitor = this._visitor.bind(this);
         this.checker = checker;
-        this.crossReferenceGetter = crossReferenceGetter;
+        this.hooks = hooks;
         this.repository = reposiotry;
         this.moduleCache = {};
+        this.namespaceCache = {};
     }
 
     runOnFile(file: ts.SourceFile) : void {
@@ -50,7 +54,12 @@ export class TypescriptExtractor {
         else if (ts.isInterfaceDeclaration(node)) return this.handleInterfaceDeclaration(node);
         else if (ts.isFunctionDeclaration(node) && node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)) return this.handleFunctionDeclaration(node);
         else if (ts.isTypeAliasDeclaration(node)) return this.handleTypeDeclaration(node);
-        else if (ts.isModuleDeclaration(node)) return ts.forEachChild(node, (child) => this.visitor(child));
+        else if (ts.isModuleDeclaration(node) && node.body && ts.isModuleBlock(node.body)) {
+            const currModule = this.currentModule;
+            this.currentModule = this.namespaceCache[node.name.text]
+            for (const stmt of node.body.statements) this._visitor(stmt);
+            this.currentModule = currModule;
+        }
     }
 
     _preparer(node: ts.Node) : void {
@@ -61,41 +70,62 @@ export class TypescriptExtractor {
                 typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p)),
                 properties: [],
                 methods: [],
-                ...this.getLOC(node, sourceFile),
+                loc: this.getLOC(node, sourceFile),
                 constructor: undefined,
                 isAbstract: node.modifiers && node.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
-                sourceFile: sourceFile.fileName,
                 jsDoc: this.getJSDocData(node),
                 isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
             });
         } else if (ts.isInterfaceDeclaration(node)) {
+            const existing = this.currentModule.interfaces.get(node.name.text);
+            if (existing) {
+                existing.loc.push(this.getLOC(node, sourceFile));
+                return;
+            }
             this.currentModule.interfaces.set(node.name.text, {
                 name: node.name.text,
-                ...this.getLOC(node, sourceFile),
+                loc: [this.getLOC(node, sourceFile)],
                 properties: [],
                 jsDoc: this.getJSDocData(node),
                 isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
             });
         } else if (ts.isEnumDeclaration(node)) {
+            const existing = this.currentModule.enums.get(node.name.text);
+            if (existing) {
+                existing.loc.push(this.getLOC(node, sourceFile));
+                existing.members.push(...node.members.map(m => ({
+                    name: m.name.getText(),
+                    initializer: m.initializer && m.initializer.getText(),
+                    loc: this.getLOC(m),
+                })));
+                return;
+            }
             this.currentModule.enums.set(node.name.text, {
                 name: node.name.text,
                 const: Boolean(node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ConstKeyword)),
                 members: node.members.map(m => ({
                     name: m.name.getText(),
                     initializer: m.initializer && m.initializer.getText(),
-                    pos: sourceFile.getLineAndCharacterOfPosition(m.getStart()),
+                    loc: this.getLOC(m),
                 })),
-                ...this.getLOC(node, sourceFile),
+                loc: [this.getLOC(node, sourceFile)],
                 jsDoc: this.getJSDocData(node),
                 isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
             });
         } else if (ts.isTypeAliasDeclaration(node)) {
             this.currentModule.types.set(node.name.text, {
                 name: node.name.text,
-                ...this.getLOC(node, sourceFile),
+                loc: this.getLOC(node, sourceFile),
                 jsDoc: this.getJSDocData(node),
                 isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
             });
+        } else if (ts.isModuleDeclaration(node) && node.body && ts.isModuleBlock(node.body)) {
+            const currModule = this.currentModule;
+            this.currentModule = this.namespaceCache[node.name.text] ? this.namespaceCache[node.name.text] : createModule(node.name.text, false, this.getLOC(node, node.getSourceFile(), false).sourceFile, true);
+            currModule.modules.set(node.name.text, this.currentModule);
+            this.namespaceCache[node.name.text] = this.currentModule;
+            for (const stmt of node.body.statements) this._preparer(stmt);
+            this.currentModule = currModule;
         }
     }
 
@@ -110,7 +140,7 @@ export class TypescriptExtractor {
             parameters: node.parameters.map(p => this.resolveParameter(p)),
             typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p)),
             returnType: node.type && this.resolveType(node.type),
-            ...this.getLOC(node),
+            loc: this.getLOC(node),
             jsDoc: this.getJSDocData(node)
         });
     }
@@ -121,7 +151,7 @@ export class TypescriptExtractor {
             if (!declaration.initializer) continue;
             declarations.push({
                 name: declaration.name.getText(),
-                ...this.getLOC(declaration),
+                loc: this.getLOC(declaration),
                 type: declaration.type ? this.resolveType(declaration.type) : undefined,
                 jsDoc: this.getJSDocData(node)
             });
@@ -147,7 +177,7 @@ export class TypescriptExtractor {
                 res.properties.push({
                     name: member.name.getText(),
                     type: member.type && this.resolveType(member.type),
-                    ...this.getLOC(member, sourceFile),
+                    loc: this.getLOC(member, sourceFile),
                     isOptional: Boolean(member.questionToken),
                     isPrivate, isProtected, isStatic, isReadonly, isAbstract, 
                     jsDoc: this.getJSDocData(member)
@@ -159,7 +189,7 @@ export class TypescriptExtractor {
                     returnType: member.type && this.resolveType(member.type),
                     typeParameters: member.typeParameters && member.typeParameters.map(p => this.resolveGenerics(p)),
                     parameters: member.parameters.map(p => this.resolveParameter(p)),
-                    ...this.getLOC(member, sourceFile),
+                    loc: this.getLOC(member, sourceFile),
                     isPrivate, isProtected, isStatic, isAbstract,
                     jsDoc: this.getJSDocData(member)
                 });
@@ -180,7 +210,7 @@ export class TypescriptExtractor {
 
     handleInterfaceDeclaration(node: ts.InterfaceDeclaration) : void {
         const res = this.currentModule.interfaces.get(node.name.text) as InterfaceDecl;
-        res.properties = node.members.map(m => this.resolveProperty(m as ts.PropertySignature));
+        res.properties.push(...node.members.map(m => this.resolveProperty(m as ts.PropertySignature)));
         if (node.heritageClauses) {
             const extendsClause = node.heritageClauses.find(c => c.token === ts.SyntaxKind.ExtendsKeyword);
             res.extends = extendsClause && this.resolveHeritage(extendsClause.types[0]);
@@ -227,55 +257,47 @@ export class TypescriptExtractor {
         return module;
     }
 
-    getReferenceTypeFromName(name: string) : ReferenceType|undefined {
-        if (EXLUDED_TYPE_REFS.includes(name)) return {name, kind: TypeKinds.UNKNOWN};
+    getReferenceTypeFromSymbol(symbol: ts.Symbol, moduleName?: string) : ReferenceType|undefined {
+        const name = symbol.name;
+        if (EXLUDED_TYPE_REFS.includes(name)) return {name: name, kind: TypeKinds.UNKNOWN};
         const path: Array<string> = [];
-        return this.forEachModule<ReferenceType>(this.module, (module) => {
-            if (module.classes.has(name)) {
+        if (hasBit(symbol.flags, ts.SymbolFlags.Class)) {
+            return this.forEachModule<ReferenceType>(this.module, (module) => {
+                if ((moduleName && module.name !== moduleName) || !module.classes.has(name)) return this.hooks.resolveSymbol(symbol);;
                 if (!module.isGlobal) path.push(module.name);
-                return {
-                    name,
-                    path,
-                    kind: TypeKinds.CLASS,
-                };
-            }
-            else if (module.interfaces.has(name)) {
-                if (!module.isGlobal) path.push(module.name);
-                return {
-                    name,
-                    path,
-                    kind: TypeKinds.INTERFACE
-                };
-            }
-            else if (module.enums.has(name)) {
-                if (!module.isGlobal) path.push(module.name);
-                return {
-                    name,
-                    path,
-                    kind: TypeKinds.ENUM
-                };
-            }
-            else if (module.types.has(name)) {
-                if (!module.isGlobal) path.push(module.name);
-                return {
-                    name,
-                    path,
-                    kind: TypeKinds.TYPE_ALIAS
-                };
-            }
-            else return this.crossReferenceGetter(name);
+                return { name, path, kind: TypeKinds.CLASS }
+            });
+        }
+        else if (hasBit(symbol.flags, ts.SymbolFlags.Interface)) return this.forEachModule<ReferenceType>(this.module, (module) => {
+            if ((moduleName && module.name !== moduleName) || !module.interfaces.has(name)) return this.hooks.resolveSymbol(symbol);;
+            if (!module.isGlobal) path.push(module.name);
+            return { name, path, kind: TypeKinds.INTERFACE };
+        });
+        else if (hasBit(symbol.flags, ts.SymbolFlags.Enum)) {
+            return this.forEachModule<ReferenceType>(this.module, (module) => {
+            if ((moduleName && module.name !== moduleName) || !module.enums.has(name)) return this.hooks.resolveSymbol(symbol);
+            if (!module.isGlobal) path.push(module.name);
+            return { name, path, kind: TypeKinds.ENUM };
         });
     }
+        else if (hasBit(symbol.flags, ts.SymbolFlags.TypeAlias)) return this.forEachModule<ReferenceType>(this.module, (module) => {
+            if ( (moduleName && module.name !== moduleName) || !module.types.has(name) ) return this.hooks.resolveSymbol(symbol);
+            if (!module.isGlobal) path.push(module.name);
+            return { name, path, kind: TypeKinds.TYPE_ALIAS };
+        });
+        return undefined;
+    }
 
-    resolveType(type: ts.Node|string) : TypeOrLiteral {
-        if (typeof type === "string") {
-            const symbolRef = this.references.get(type);
-            if (symbolRef) return {type: symbolRef};
-            const ref = this.getReferenceTypeFromName(type) || { name: type, kind: TypeKinds.UNKNOWN };
-            this.references.set(type, ref);
-            return { type: ref };
-        }
-        else if (ts.isTypeReferenceNode(type)) {
+    resolveSymbol(symbol: ts.Symbol, typeParameters?: TypeOrLiteral[], name?: string) : TypeOrLiteral {
+        const symbolRef = this.references.get(symbol.name) || this.hooks.getReference(symbol);
+        if (symbolRef) return { type: symbolRef, typeParameters};
+        const ref = this.getReferenceTypeFromSymbol(symbol) || { name: symbol.name, kind: TypeKinds.UNKNOWN };
+        if (!ref.external) this.references.set(symbol.name, ref);
+        return {type: ref, typeParameters};
+    }
+
+    resolveType(type: ts.Node) : TypeOrLiteral {
+         if (ts.isTypeReferenceNode(type)) {
             const symbol = this.checker.getSymbolAtLocation(type.typeName);
             const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg));
             if (!symbol) return {
@@ -286,24 +308,15 @@ export class TypescriptExtractor {
                 type: { name: symbol.name, kind: TypeKinds.UNKNOWN},
                 typeParameters
             };
-            if ((symbol.flags & ts.SymbolFlags.TypeParameter) === ts.SymbolFlags.TypeParameter) return {
+            if (hasBit(symbol.flags, ts.SymbolFlags.TypeParameter)) return {
                 type: { name: symbol.name, kind: TypeKinds.TYPE_PARAMETER},
                 typeParameters
             };
-            const symbolRef = this.references.get(symbol.name);
-            if (symbolRef) return { type: symbolRef, typeParameters};
-        
-            const ref = this.getReferenceTypeFromName(symbol.name) || { name: symbol.name, kind: TypeKinds.UNKNOWN };
-            this.references.set(symbol.name, ref);
-            return {type: ref, typeParameters};
-        }
-        else if (ts.isIdentifier(type)) {
-            const name = type.text;
-            const symbolRef = this.references.get(name);
-            if (symbolRef) return {type: symbolRef};
-            const ref = this.getReferenceTypeFromName(name) || { name, kind: TypeKinds.UNKNOWN };
-            this.references.set(name, ref);
-            return { type: ref };
+            if (hasBit(symbol.flags, ts.SymbolFlags.ModuleMember) && symbol.declarations && ts.isModuleBlock(symbol.declarations[0].parent)) {
+                const bod = symbol.declarations[0].parent.parent;
+                return this.resolveSymbol(symbol, typeParameters, bod.name.text);
+            }
+            return this.resolveSymbol(symbol, typeParameters);
         }
         else if (ts.isFunctionTypeNode(type)) {
             return {
@@ -364,7 +377,7 @@ export class TypescriptExtractor {
         else if (ts.isThisTypeNode(type)) {
             const symbol = this.checker.getSymbolAtLocation(type);
             if (!symbol) return { name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };;
-            return this.resolveType(symbol.name);
+            return this.resolveSymbol(symbol);
         }
         else switch (type.kind) {
         case ts.SyntaxKind.NumberKeyword: return {name: "number", kind: TypeKinds.NUMBER};
@@ -407,7 +420,7 @@ export class TypescriptExtractor {
             typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))
         };
         return {
-            type: this.resolveType(param.expression.text),
+            type: this.resolveSymbol(this.checker.getSymbolAtLocation(param.expression) as ts.Symbol),
             typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))
         } as Reference;
     }
@@ -468,11 +481,12 @@ export class TypescriptExtractor {
         return clone;
     }
 
-    getLOC(node: ts.Node, sourceFile = node.getSourceFile()) : { pos: ts.LineAndCharacter, sourceFile?: string } {
+    getLOC(node: ts.Node, sourceFile = node.getSourceFile(), includeLine = true) : Loc {
         const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+        if (this.currentModule.isNamespace) return {pos, sourceFile: `${this.currentModule.repository}#L${pos.line + 1}`};
         return {
             pos,
-            sourceFile: this.currentModule.repository && `${this.currentModule.repository}/${getLastItemFromPath(sourceFile.fileName)}#L${pos.line + 1}`
+            sourceFile: this.currentModule.repository && `${this.currentModule.repository}/${getLastItemFromPath(sourceFile.fileName)}${includeLine ? `#L${pos.line + 1}`:""}`
         };
     }
 
