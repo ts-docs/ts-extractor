@@ -1,3 +1,4 @@
+import ts from "typescript";
 
 export interface Module {
     name: string,
@@ -16,10 +17,10 @@ export interface JSDocData {
     comment?: string
 }
 
+
 export interface Node {
     name: string,
-    start: number,
-    end: number,
+    pos: ts.LineAndCharacter,
     sourceFile?: string,
     jsDoc?: JSDocData,
     isExported?: boolean
@@ -113,11 +114,13 @@ export interface ClassProperty extends ClassMember {
     exclamation?: boolean
 }
 
-export interface FunctionParameter extends Node {
+export interface FunctionParameter {
+    name: string,
     type?: TypeOrLiteral,
     rest?: boolean,
     isOptional?: boolean,
-    defaultValue?: string
+    defaultValue?: string,
+    jsDoc: JSDocData
 }
 
 export interface ClassMethod extends ClassMember {
@@ -144,34 +147,35 @@ export interface FunctionDecl extends PotentiallyNamelessNode {
     parameters: Array<FunctionParameter>
 }
 
-export interface ArrowFunction extends Omit<Node, "name"> {
+export interface ArrowFunction {
     typeParameters?: Array<TypeParameter>,
     returnType?: TypeOrLiteral,
     parameters?: Array<FunctionParameter>,
     kind: TypeKinds
 }
 
-export interface IndexSignatureDeclaration extends Omit<Node, "name"> {
+export interface IndexSignatureDeclaration {
     key?: TypeOrLiteral,
     type: TypeOrLiteral
 }
 
-export interface ObjectLiteral extends Omit<Node, "name">  {
+export interface ObjectLiteral  {
     properties: Array<InterfaceProperty|IndexSignatureDeclaration>,
     kind: TypeKinds
 }
 
-export interface UnionOrIntersection extends Omit<Node, "name"> {
+export interface UnionOrIntersection {
     types: Array<TypeOrLiteral>,
     kind: TypeKinds
 }
 
-export interface Tuple extends Omit<Node, "name"> {
+export interface Tuple {
     types: Array<TypeOrLiteral>,
     kind: TypeKinds
 }
 
-export interface InterfaceProperty extends Node {
+export interface InterfaceProperty {
+    name: string,
     type?: TypeOrLiteral,
     isReadonly?: boolean,
     isOptional: boolean
