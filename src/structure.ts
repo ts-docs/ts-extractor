@@ -9,6 +9,7 @@ export interface Module {
     types: Map<string, TypeDecl>,
     enums: Map<string, EnumDecl>,
     constants: Array<ConstantDecl>,
+    repository?: string,
     isGlobal?: boolean
 }
 
@@ -16,7 +17,6 @@ export interface JSDocData {
     tags?: Array<string>,
     comment?: string
 }
-
 
 export interface Node {
     name: string,
@@ -28,16 +28,16 @@ export interface Node {
 
 export interface PotentiallyNamelessNode {
     name?: string,
-    start: number,
-    end: number,
+    pos: ts.LineAndCharacter,
     sourceFile?: string,
     jsDoc?: JSDocData,
     isExported?: boolean
 }
 
-export function createModule(name: string, isGlobal?: boolean) : Module {
+export function createModule(name: string, isGlobal?: boolean, repository?: string) : Module {
     return {
         name,
+        repository,
         modules: new Map(),
         classes: new Map(),
         functions: [],

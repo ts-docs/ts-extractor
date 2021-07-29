@@ -1,13 +1,14 @@
-import * as ts from "typescript";
-import * as fs from "fs";
-import * as path from "path";
+import ts from "typescript";
+import fs from "fs";
+import path from "path";
+import {execSync} from "child_process";
 
-export function getLastItemFromPath(path: string, offset = 1) : string {
-    return path.substring(path.lastIndexOf("\\") + offset);
+export function getLastItemFromPath(p: string) : string {
+    return path.parse(p).base;
 }
 
-export function getAllButLastItemFromPath(path: string) : string {
-    return path.substring(0, path.lastIndexOf("\\"));
+export function getAllButLastItemFromPath(p: string) : string {
+    return path.parse(p).dir;
 }
 
 
@@ -30,11 +31,34 @@ export function findTSConfig(basePath = process.cwd()) : ts.CompilerOptions|unde
     return undefined;
 }
 
+export type PackageJSON = { 
+    contents: Record<string, string>,
+    path: string
+}
+
 /** Goes up */
-export function findPackageJSON(basePath: string) : Record<string, string>|undefined {
+export function findPackageJSON(basePath: string) : PackageJSON|undefined {
     const pathToJson = path.join(basePath, "package.json");
-    if (fs.existsSync(pathToJson)) return JSON.parse(fs.readFileSync(pathToJson, "utf-8"));
+    if (fs.existsSync(pathToJson)) return { contents: JSON.parse(fs.readFileSync(pathToJson, "utf-8")), path: basePath};
     const newPath = path.join(basePath, "../");
     if (newPath === basePath) return undefined;
     return findPackageJSON(newPath);
+}
+
+export function getRepository(packageJSON: PackageJSON) : string|undefined {
+    const repository = packageJSON.contents.repository;
+    if (!repository) return;
+    if (typeof repository === "string") {
+        const [type, link] = repository.split(":");
+        const branch = getBranchName(packageJSON.path);
+        return `https://${type}.com/${link}/tree/${branch}`;
+    } else {
+        const {type, url} = (repository as Record<string, string>);
+        const branch = getBranchName(packageJSON.path);
+        return `${url.replace(new RegExp(`${type}\\+|\\.${type}`, "g"), "")}/tree/${branch}`;
+    }
+}
+
+export function getBranchName(path: string) : string|undefined {
+    return execSync(`cd ${path} && git rev-parse --abbrev-ref HEAD`).slice(0, -1).toString("utf-8");
 }

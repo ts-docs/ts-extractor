@@ -1,6 +1,7 @@
 
 import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData, InterfaceDecl, ClassDecl, TypeDecl } from "../structure";
 import ts from "typescript";
+import { getLastItemFromPath } from "../util";
 
 const EXLUDED_TYPE_REFS = ["Promise", "Array", "Map", "Set", "Function", "unknown", "Record", "Omit"];
 
@@ -14,8 +15,9 @@ export class TypescriptExtractor {
     private visitor: (node: ts.Node) => void
     currentModule: Module
     checker: ts.TypeChecker
+    repository?: string
     private crossReferenceGetter: CrossReferenceGetter
-    constructor(globalModule: Module, baseDir: string, checker: ts.TypeChecker, crossReferenceGetter: CrossReferenceGetter) {
+    constructor(globalModule: Module, baseDir: string, reposiotry: string|undefined, checker: ts.TypeChecker, crossReferenceGetter: CrossReferenceGetter) {
         this.module = globalModule;
         this.currentModule = this.module;
         this.references = new Map();
@@ -23,6 +25,7 @@ export class TypescriptExtractor {
         this.visitor = this._visitor.bind(this);
         this.checker = checker;
         this.crossReferenceGetter = crossReferenceGetter;
+        this.repository = reposiotry;
         this.moduleCache = {};
     }
 
@@ -58,9 +61,8 @@ export class TypescriptExtractor {
                 typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p)),
                 properties: [],
                 methods: [],
+                ...this.getLOC(node, sourceFile),
                 constructor: undefined,
-                start: node.pos,
-                end: node.end,
                 isAbstract: node.modifiers && node.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
                 sourceFile: sourceFile.fileName,
                 jsDoc: this.getJSDocData(node),
@@ -69,8 +71,7 @@ export class TypescriptExtractor {
         } else if (ts.isInterfaceDeclaration(node)) {
             this.currentModule.interfaces.set(node.name.text, {
                 name: node.name.text,
-                pos: sourceFile.getLineAndCharacterOfPosition(node.getStart()),
-                sourceFile: sourceFile.fileName,
+                ...this.getLOC(node, sourceFile),
                 properties: [],
                 jsDoc: this.getJSDocData(node),
                 isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
@@ -84,16 +85,14 @@ export class TypescriptExtractor {
                     initializer: m.initializer && m.initializer.getText(),
                     pos: sourceFile.getLineAndCharacterOfPosition(m.getStart()),
                 })),
-                pos: node.getSourceFile().getLineAndCharacterOfPosition(node.getStart()),
-                sourceFile: sourceFile.fileName,
+                ...this.getLOC(node, sourceFile),
                 jsDoc: this.getJSDocData(node),
                 isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
             });
         } else if (ts.isTypeAliasDeclaration(node)) {
             this.currentModule.types.set(node.name.text, {
                 name: node.name.text,
-                pos: sourceFile.getLineAndCharacterOfPosition(node.getStart()),
-                sourceFile: sourceFile.fileName,
+                ...this.getLOC(node, sourceFile),
                 jsDoc: this.getJSDocData(node),
                 isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
             });
@@ -111,23 +110,19 @@ export class TypescriptExtractor {
             parameters: node.parameters.map(p => this.resolveParameter(p)),
             typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p)),
             returnType: node.type && this.resolveType(node.type),
-            start: node.pos,
-            end: node.end,
-            sourceFile: node.getSourceFile().fileName,
+            ...this.getLOC(node),
             jsDoc: this.getJSDocData(node)
         });
     }
 
     handleVariableDeclaration(node: ts.VariableStatement) : void {
         const declarations: Array<ConstantDecl> = [];
-        const sourceFile = node.getSourceFile();
         for (const declaration of node.declarationList.declarations) {
             if (!declaration.initializer) continue;
             declarations.push({
                 name: declaration.name.getText(),
-                pos: sourceFile.getLineAndCharacterOfPosition(node.getStart()),
+                ...this.getLOC(declaration),
                 type: declaration.type ? this.resolveType(declaration.type) : undefined,
-                sourceFile: sourceFile.fileName,
                 jsDoc: this.getJSDocData(node)
             });
         }
@@ -152,7 +147,7 @@ export class TypescriptExtractor {
                 res.properties.push({
                     name: member.name.getText(),
                     type: member.type && this.resolveType(member.type),
-                    pos: sourceFile.getLineAndCharacterOfPosition(member.getStart()),
+                    ...this.getLOC(member, sourceFile),
                     isOptional: Boolean(member.questionToken),
                     isPrivate, isProtected, isStatic, isReadonly, isAbstract, 
                     jsDoc: this.getJSDocData(member)
@@ -164,7 +159,7 @@ export class TypescriptExtractor {
                     returnType: member.type && this.resolveType(member.type),
                     typeParameters: member.typeParameters && member.typeParameters.map(p => this.resolveGenerics(p)),
                     parameters: member.parameters.map(p => this.resolveParameter(p)),
-                    pos: sourceFile.getLineAndCharacterOfPosition(member.getStart()),
+                    ...this.getLOC(member, sourceFile),
                     isPrivate, isProtected, isStatic, isAbstract,
                     jsDoc: this.getJSDocData(member)
                 });
@@ -203,7 +198,7 @@ export class TypescriptExtractor {
         for (const pathPart of paths) {
             const newLastMod = lastModule.modules.get(pathPart);
             if (!newLastMod) {
-                const mod = createModule(pathPart);
+                const mod = createModule(pathPart, false, `${lastModule.repository}/${pathPart}`);
                 lastModule.modules.set(pathPart, mod);
                 lastModule = mod;
             } else lastModule = newLastMod;
@@ -435,6 +430,14 @@ export class TypescriptExtractor {
             (clone.modules as Array<Record<string, unknown>>).push(this.moduleToJSON(mod));
         }
         return clone;
+    }
+
+    getLOC(node: ts.Node, sourceFile = node.getSourceFile()) : { pos: ts.LineAndCharacter, sourceFile?: string } {
+        const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+        return {
+            pos,
+            sourceFile: this.currentModule.repository && `${this.currentModule.repository}/${getLastItemFromPath(sourceFile.fileName)}#L${pos.line + 1}`
+        };
     }
 
     toJSON() : Record<string, unknown> {
