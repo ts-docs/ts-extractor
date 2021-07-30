@@ -3,8 +3,7 @@ import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, Ob
 import ts from "typescript";
 import { getLastItemFromPath, hasBit } from "../util";
 
-const EXLUDED_TYPE_REFS = ["Promise", "Array", "Map", "Set", "Function", "unknown", "Record", "Omit"];
-
+const EXLUDED_TYPE_REFS = ["Promise", "Array", "Map", "IterableIterator", "Set", "Function", "unknown", "Record", "Omit", "Symbol", "Buffer", "Error", "URL", "EventTarget", "URLSearchParams"];
 
 export interface TypescriptExtractorHooks {
     getReference: (symbol: ts.Symbol) => ReferenceType|undefined,
@@ -236,11 +235,11 @@ export class TypescriptExtractor {
         return lastModule;
     }
 
-    forEachModule<R>(module: Module, cb: (module: Module) => R|undefined) : R|undefined {
-        const firstCb = cb(module);
+    forEachModule<R>(module: Module, cb: (module: Module, path: Array<string>) => R|undefined, pathToMod: Array<string> = []) : R|undefined {
+        const firstCb = cb(module, pathToMod);
         if (firstCb) return firstCb;
         for (const [, mod] of module.modules) {
-            const res = this.forEachModule(mod, cb);
+            const res = this.forEachModule(mod, cb, [...pathToMod, mod.name]);
             if (res) return res;
         }
         return undefined;
@@ -259,33 +258,32 @@ export class TypescriptExtractor {
 
     getReferenceTypeFromSymbol(symbol: ts.Symbol, moduleName?: string) : ReferenceType|undefined {
         const name = symbol.name;
-        if (EXLUDED_TYPE_REFS.includes(name)) return {name: name, kind: TypeKinds.UNKNOWN};
-        const path: Array<string> = [];
-        if (hasBit(symbol.flags, ts.SymbolFlags.Class)) {
-            return this.forEachModule<ReferenceType>(this.module, (module) => {
+        if (hasBit(symbol.flags, ts.SymbolFlags.Class)) return this.forEachModule<ReferenceType>(this.module, (module, path) => {
                 if ((moduleName && module.name !== moduleName) || !module.classes.has(name)) return this.hooks.resolveSymbol(symbol);;
-                if (!module.isGlobal) path.push(module.name);
                 return { name, path, kind: TypeKinds.CLASS }
-            });
-        }
-        else if (hasBit(symbol.flags, ts.SymbolFlags.Interface)) return this.forEachModule<ReferenceType>(this.module, (module) => {
+        });
+        else if (hasBit(symbol.flags, ts.SymbolFlags.Interface)) return this.forEachModule<ReferenceType>(this.module, (module, path) => {
             if ((moduleName && module.name !== moduleName) || !module.interfaces.has(name)) return this.hooks.resolveSymbol(symbol);;
-            if (!module.isGlobal) path.push(module.name);
             return { name, path, kind: TypeKinds.INTERFACE };
         });
         else if (hasBit(symbol.flags, ts.SymbolFlags.Enum)) {
-            return this.forEachModule<ReferenceType>(this.module, (module) => {
+            return this.forEachModule<ReferenceType>(this.module, (module, path) => {
             if ((moduleName && module.name !== moduleName) || !module.enums.has(name)) return this.hooks.resolveSymbol(symbol);
-            if (!module.isGlobal) path.push(module.name);
             return { name, path, kind: TypeKinds.ENUM };
         });
     }
-        else if (hasBit(symbol.flags, ts.SymbolFlags.TypeAlias)) return this.forEachModule<ReferenceType>(this.module, (module) => {
+        else if (hasBit(symbol.flags, ts.SymbolFlags.TypeAlias)) return this.forEachModule<ReferenceType>(this.module, (module, path) => {
             if ( (moduleName && module.name !== moduleName) || !module.types.has(name) ) return this.hooks.resolveSymbol(symbol);
-            if (!module.isGlobal) path.push(module.name);
             return { name, path, kind: TypeKinds.TYPE_ALIAS };
         });
-        return undefined;
+        else return this.forEachModule<ReferenceType>(this.module, (module, path) => {
+            if ((moduleName && module.name !== moduleName)) return this.hooks.resolveSymbol(symbol);;
+            if (module.classes.has(name)) return { name, path, kind: TypeKinds.CLASS };
+            else if (module.interfaces.has(name)) return { name, path, kind: TypeKinds.INTERFACE };
+            else if (module.enums.has(name)) return { name, path, kind: TypeKinds.ENUM};
+            else if (module.types.has(name)) return { name, path, kind: TypeKinds.TYPE_ALIAS };
+            return undefined;
+        });
     }
 
     resolveSymbol(symbol: ts.Symbol, typeParameters?: TypeOrLiteral[], name?: string) : TypeOrLiteral {
@@ -304,10 +302,12 @@ export class TypescriptExtractor {
                 type: { name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN},
                 typeParameters,
             };
-            if (EXLUDED_TYPE_REFS.includes(symbol.name)) return {
-                type: { name: symbol.name, kind: TypeKinds.UNKNOWN},
-                typeParameters
-            };
+            if (EXLUDED_TYPE_REFS.includes(symbol.name)) {
+                return {
+                    type: { name: symbol.name, kind: TypeKinds.DEFAULT_API },
+                    typeParameters
+                }
+            }
             if (hasBit(symbol.flags, ts.SymbolFlags.TypeParameter)) return {
                 type: { name: symbol.name, kind: TypeKinds.TYPE_PARAMETER},
                 typeParameters

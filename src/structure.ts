@@ -88,6 +88,7 @@ export const enum TypeKinds {
     READONLY_OPERATOR,
     KEYOF_OPERATOR,
     ARRAY_TYPE,
+    DEFAULT_API,
     INTERSECTION
 }
 

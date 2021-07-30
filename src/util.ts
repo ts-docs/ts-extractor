@@ -64,5 +64,5 @@ export function getBranchName(path: string) : string|undefined {
 }
 
 export function hasBit(num: number, bit: number) : boolean {
-    return (num & bit) === num;
+    return (num & bit) !== 0;
 }
