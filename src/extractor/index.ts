@@ -3,7 +3,7 @@ import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, Ob
 import ts from "typescript";
 import { getLastItemFromPath, hasBit } from "../util";
 
-const EXLUDED_TYPE_REFS = ["Promise", "Array", "Map", "IterableIterator", "Set", "Function", "unknown", "Record", "Omit", "Symbol", "Buffer", "Error", "URL", "EventTarget", "URLSearchParams"];
+const EXCLUDED_TYPE_REFS = ["Promise", "Array", "Map", "IterableIterator", "Set", "Function", "unknown", "Record", "Omit", "Symbol", "Buffer", "Error", "URL", "EventTarget", "URLSearchParams"];
 
 export interface TypescriptExtractorHooks {
     getReference: (symbol: ts.Symbol) => ReferenceType|undefined,
@@ -287,6 +287,7 @@ export class TypescriptExtractor {
     }
 
     resolveSymbol(symbol: ts.Symbol, typeParameters?: TypeOrLiteral[], name?: string) : TypeOrLiteral {
+        if (EXCLUDED_TYPE_REFS.includes(symbol.name)) return { type: { name: symbol.name, kind: TypeKinds.DEFAULT_API }, typeParameters }
         const symbolRef = this.references.get(symbol.name) || this.hooks.getReference(symbol);
         if (symbolRef) return { type: symbolRef, typeParameters};
         const ref = this.getReferenceTypeFromSymbol(symbol) || { name: symbol.name, kind: TypeKinds.UNKNOWN };
@@ -302,12 +303,6 @@ export class TypescriptExtractor {
                 type: { name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN},
                 typeParameters,
             };
-            if (EXLUDED_TYPE_REFS.includes(symbol.name)) {
-                return {
-                    type: { name: symbol.name, kind: TypeKinds.DEFAULT_API },
-                    typeParameters
-                }
-            }
             if (hasBit(symbol.flags, ts.SymbolFlags.TypeParameter)) return {
                 type: { name: symbol.name, kind: TypeKinds.TYPE_PARAMETER},
                 typeParameters
