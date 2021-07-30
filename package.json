@@ -1,11 +1,10 @@
 {
-  "name": "ts-extractor",
+  "name": "@ts-docs/extractor",
   "version": "1.0.0",
-  "description": "Extract stuff like modules, classes, interfaces and enums from typescript projects",
+  "description": "Extracts modules, classes, interfaces, enums, type aliases and constants from typescript projects. ",
   "main": "dist/index.js",
   "devDependencies": {
     "@types/node": "^16.4.2",
-    "@types/parse-github-url": "^1.0.0",
     "@typescript-eslint/eslint-plugin": "^4.28.4",
     "@typescript-eslint/parser": "^4.28.4",
     "eslint": "^7.31.0",
@@ -19,7 +18,7 @@
     "type": "git",
     "url": "git+https://github.com/GoogleFeud/ts-extractor.git"
   },
-  "keywords": [],
+  "keywords": ["typescript", "AST", "generator", "types", "extractor"],
   "author": "GoogleFeud",
   "license": "MIT",
   "bugs": {

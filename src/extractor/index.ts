@@ -61,7 +61,7 @@ export class TypescriptExtractor {
         }
     }
 
-    _preparer(node: ts.Node) : void {
+    private _preparer(node: ts.Node) : void {
         const sourceFile = node.getSourceFile();
         if (ts.isClassDeclaration(node)) {
             this.currentModule.classes.set(node.name?.text || "export default", {

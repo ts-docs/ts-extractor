@@ -2,106 +2,21 @@
 
 Extracts modules, classes, interfaces, enums, type aliases and constants from typescript projects. 
 
-## What's different?
+## What's special about this
 
-- **Clear project structure** - A project is made up of modules, and a "module" is basically a folder. Modules can contain other modules (sub-folders), or exported classes, interfaces, enums, functions, constants and types from each file inside the folder.
+- **Clear project structure** - A project is made up of modules, and a "module" is either a folder or a namespace. Modules can contain other modules (sub-folders, other namespaces), or exported classes, interfaces, enums, functions, constants and types from each file inside the folder.
 
 - **References** - Every type reference provides a **path** which leads to the module it's declared in, which allows for super easy and painless linking. 
 
-- **Monorepo support** - Bundle types from all projects in the monorepo, creating external references.
+- **Monorepo support** - Bundle types from all projects in the monorepo.
 
-## Usage
+- **JSDoc support** - Extracts all JSDoc tags, along with their comments and type.
 
-File structure:
-```
-- package.json
-- index.ts
-- tsconfig.json
-```
+## Install
 
-`index.ts`:
-```ts
-import {extract} from "ts-extractor";
+```npm i @ts-docs/extractor```
 
-/**
- * This interface is used for testing. 
-*/
-export interface TestInterface {
-    a: string,
-    b: number,
-    c?: TestInterface
-}
+## Examples
 
-const [extractor] = extract(["./index.ts"]);
+Check out the examples [here](https://github.com/ts-docs/ts-extractor/tree/main/examples)
 
-console.dir(extractor[0].module, {depth: 10});
-```
-
-Logs:
-
-```js
-[
-  {
-    name: 'Global',
-    modules: Map(0) {},
-    classes: [],
-    functions: [],
-    interfaces: [
-      {
-        name: 'TestInterface',
-        start: 39,
-        end: 206,
-        sourceFile: 'path/index.ts',
-        properties: [
-          {
-            name: 'a',
-            type: { name: 'string', kind: 6 },
-            isOptional: false,
-            isReadonly: undefined,
-            start: 125,
-            end: 141
-          },
-          {
-            name: 'b',
-            type: { name: 'number', kind: 5 },
-            isOptional: false,
-            isReadonly: undefined,
-            start: 141,
-            end: 157
-          },
-          {
-            name: 'c',
-            type: {
-              type: { name: 'TestInterface', path: [], kind: 1 },
-              typeParameters: undefined
-            },
-            isOptional: true,
-            isReadonly: undefined,
-            start: 157,
-            end: 181
-          },
-          {
-            name: 'd',
-            type: {
-              type: { name: 'Array', kind: 15 },
-              typeParameters: [ { name: 'string', kind: 6 } ]
-            },
-            isOptional: false,
-            isReadonly: undefined,
-            start: 181,
-            end: 203
-          }
-        ],
-        jsDoc: {
-          comment: 'This interface is used for testing.',
-          tags: undefined
-        }
-      }
-    ],
-    types: [],
-    enums: [],
-    constants: [],
-    isGlobal: true
-  }
-]
-```

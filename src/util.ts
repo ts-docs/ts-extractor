@@ -46,16 +46,16 @@ export function findPackageJSON(basePath: string) : PackageJSON|undefined {
 }
 
 export function getRepository(packageJSON: PackageJSON) : string|undefined {
-    const repository = packageJSON.contents.repository;
+    const repository = packageJSON.contents.repository as Record<string, string>|string;
     if (!repository) return;
     if (typeof repository === "string") {
         const [type, link] = repository.split(":");
         const branch = getBranchName(packageJSON.path);
         return `https://${type}.com/${link}/tree/${branch}`;
     } else {
-        const {type, url} = (repository as Record<string, string>);
+        const {type, url} = repository;
         const branch = getBranchName(packageJSON.path);
-        return `${url.replace(new RegExp(`${type}\\+|\\.${type}`, "g"), "")}/tree/${branch}`;
+        return `${url.replace(new RegExp(`${type}\\+|\\.${type}`, "g"), "")}/tree/${branch}${repository.directory || ""}`;
     }
 }
 
