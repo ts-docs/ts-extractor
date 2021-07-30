@@ -1,6 +1,6 @@
 # ts-extractor
 
-Extracts stuff like modules, classes, interfaces and enums from typescript projects. 
+Extracts modules, classes, interfaces, enums, type aliases and constants from typescript projects. 
 
 ## What's different?
 

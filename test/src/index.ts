@@ -1,30 +1,19 @@
 
-
-namespace A {
-    export enum Names {
-        A,
-        B,
-        C
-    }
+interface Message {
+    content: string
 }
 
-namespace A {
-    export enum Names {
-        E = 3,
-        D,
-        F
-    }
+/**
+ * When a message is received
+ * @event message
+ * @param {Message} message The received message event
+ */
+
+/**
+ * When the host shuts you down
+ * @event shutdown
+ * @param {string} reason The reason why
+ */
+export class Test {
+
 }
-
-/*
-export enum Names {
-    A, 
-    B,
-    C
-} */
-
-export interface Names {
-    a: string
-}
-
-export const a: A.Names = 5;

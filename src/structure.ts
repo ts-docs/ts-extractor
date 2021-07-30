@@ -14,8 +14,15 @@ export interface Module {
     isNamespace?: boolean
 }
 
+export interface JSDocTag {
+    name: string,
+    comment?: string,
+    arg?: string,
+    type?: TypeOrLiteral
+}
+
 export interface JSDocData {
-    tags?: Array<string>,
+    tags?: Array<JSDocTag>,
     comment?: string
 }
 
@@ -27,20 +34,20 @@ export interface Loc {
 export interface Node {
     name: string,
     loc: Loc
-    jsDoc?: JSDocData,
+    jsDoc?: Array<JSDocData>,
     isExported?: boolean
 }
 
 export type PotentiallyNamelessNode = {
     name?: string,
     loc: Loc
-    jsDoc?: JSDocData,
+    jsDoc?: Array<JSDocData>,
     isExported?: boolean
 };
 
 export type NodeWithManyLOC = {
     name?: string,
-    jsDoc?: JSDocData,
+    jsDoc?: Array<JSDocData>,
     isExported?: boolean
     loc: Array<Loc>
 }
@@ -151,6 +158,11 @@ export interface ClassMethod extends ClassMember {
 }
 
 export type Constructor = Omit<ArrowFunction, "kind">
+
+export interface ClassEvent {
+    name: string,
+
+}
 
 export interface ClassDecl extends PotentiallyNamelessNode {
     typeParameters?: Array<TypeParameter>,

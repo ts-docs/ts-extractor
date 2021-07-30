@@ -1,9 +1,9 @@
 
-import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData, InterfaceDecl, ClassDecl, TypeDecl, Loc } from "../structure";
+import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData, InterfaceDecl, ClassDecl, TypeDecl, Loc, JSDocTag } from "../structure";
 import ts from "typescript";
 import { getLastItemFromPath, hasBit } from "../util";
 
-const EXCLUDED_TYPE_REFS = ["Promise", "Array", "Map", "IterableIterator", "Set", "Function", "unknown", "Record", "Omit", "Symbol", "Buffer", "Error", "URL", "EventTarget", "URLSearchParams"];
+const EXCLUDED_TYPE_REFS = ["Promise", "Array", "Map", "IterableIterator", "Set", "Function", "unknown", "Record", "Omit", "Symbol", "Buffer", "Error", "URL", "EventTarget", "URLSearchParams", ""];
 
 export interface TypescriptExtractorHooks {
     getReference: (symbol: ts.Symbol) => ReferenceType|undefined,
@@ -445,22 +445,27 @@ export class TypescriptExtractor {
         return ts.getTextOfJSDocComment(tag.comment);
     }
 
-    getJSDocData(node: ts.Node) : JSDocData|undefined {
+    getJSDocData(node: ts.Node) : Array<JSDocData>|undefined {
         //@ts-expect-error Internal access - Why is this internal??
         const jsDoc = node.jsDoc as Array<ts.JSDoc>;
         if (!jsDoc || !jsDoc.length) return undefined;
-        const tagsLoc = jsDoc[0];
-        let tags;
-        if (tagsLoc.tags) {
-            tags = [];
-            for (const tag of tagsLoc.tags) {
-                tags.push(tag.tagName.text);
+        const res: Array<JSDocData> = [];
+        for (const currentDoc of jsDoc) {
+            let tags: Array<JSDocTag>|undefined = undefined;
+            if (currentDoc.tags) {
+                tags = [];
+                for (const tag of currentDoc.tags) {
+                    tags.push({
+                        name: tag.tagName.text, 
+                        comment: ts.getTextOfJSDocComment(tag.comment),
+                        arg: (tag as {name?: ts.Identifier}).name?.text,
+                        type: (tag as {typeExpression?: ts.JSDocTypeExpression}).typeExpression && this.resolveType((tag as unknown as {typeExpression: ts.JSDocTypeExpression}).typeExpression.type)
+                    });
+                }
             }
+            res.push({comment: ts.getTextOfJSDocComment(currentDoc.comment), tags});
         }
-        return {
-            comment: jsDoc.map(doc => ts.getTextOfJSDocComment(doc.comment)).join("\n"),
-            tags
-        };
+        return res;
     }
     
     moduleToJSON(module = this.module) : Record<string, unknown> {
