@@ -1,6 +1,6 @@
 {
   "name": "@ts-docs/extractor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Extracts modules, classes, interfaces, enums, type aliases and constants from typescript projects. ",
   "main": "dist/index.js",
   "devDependencies": {
@@ -18,7 +18,13 @@
     "type": "git",
     "url": "git+https://github.com/GoogleFeud/ts-extractor.git"
   },
-  "keywords": ["typescript", "AST", "generator", "types", "extractor"],
+  "keywords": [
+    "typescript",
+    "AST",
+    "generator",
+    "types",
+    "extractor"
+  ],
   "author": "GoogleFeud",
   "license": "MIT",
   "bugs": {
