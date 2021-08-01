@@ -4,7 +4,6 @@ import path from "path";
 import { findTSConfig  } from "./util";
 import { ExtractorList } from "./extractor/ExtractorList";
 
-
 export function extract(rootFiles: Array<string>) : [ExtractorList, ts.CompilerOptions] {
     const tsconfig = findTSConfig();
     if (!tsconfig) throw new Error("Couldn't find tsconfig.json");
@@ -40,3 +39,6 @@ export function extract(rootFiles: Array<string>) : [ExtractorList, ts.CompilerO
 }
 
 console.dir(extract(["./test/src/index.ts"])[0].toJSON(), {depth: 100});
+
+export { TypescriptExtractor } from "./extractor";
+export { ExtractorList } from "./extractor/ExtractorList";
