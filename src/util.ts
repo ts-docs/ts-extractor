@@ -66,3 +66,12 @@ export function getBranchName(path: string) : string|undefined {
 export function hasBit(num: number, bit: number) : boolean {
     return (num & bit) !== 0;
 }
+
+/** Goes up */
+export function getReadme(dir: string) : string|undefined {
+    const pathToJson = path.join(dir, "README.md");
+    if (fs.existsSync(pathToJson)) return fs.readFileSync(pathToJson, "utf-8");
+    const newPath = path.join(dir, "../");
+    if (newPath === dir) return undefined;
+    return getReadme(newPath);
+}
