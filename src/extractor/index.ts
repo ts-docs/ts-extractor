@@ -461,7 +461,7 @@ export class TypescriptExtractor {
     }
 
     getJSDocData(node: ts.Node) : Array<JSDocData>|undefined {
-        //@ts-expect-error Internal access - Why is this internal??
+        //@ts-expect-error Internal access - Why is this internal?
         const jsDoc = node.jsDoc as Array<ts.JSDoc>;
         if (!jsDoc || !jsDoc.length) return undefined;
         const res: Array<JSDocData> = [];
