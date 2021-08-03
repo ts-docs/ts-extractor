@@ -38,5 +38,3 @@ export function extract(rootFiles: Array<string>) : [ExtractorList, ts.CompilerO
 
     return [extractors, tsconfig];
 }
-
-console.dir(extract(["./test/src/index.ts"])[0].toJSON(), {depth: 100});
