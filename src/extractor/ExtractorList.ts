@@ -1,33 +1,42 @@
 import ts from "typescript";
 import { TypescriptExtractor } from ".";
 import { createModule } from "../structure";
-import { getLastItemFromPath, getAllButLastItemFromPath, findPackageJSON, getRepository } from "../util";
+import { getLastItemFromPath, getAllButLastItemFromPath, findPackageJSON, getRepository, getReadme } from "../util";
 
 
 export class ExtractorList extends Array<TypescriptExtractor> {
 
     createExtractor(fullPath: string, typeChecker: ts.TypeChecker) : TypescriptExtractor {
-        const packageJSONData = findPackageJSON(fullPath);
+        const lastDir = getAllButLastItemFromPath(fullPath);
+        const packageJSONData = findPackageJSON(lastDir);
         if (!packageJSONData) throw new Error("Couldn't find package.json");
-        const lastItem = getLastItemFromPath(getAllButLastItemFromPath(fullPath));
+        const lastItem = getLastItemFromPath(lastDir);
         const repo = getRepository(packageJSONData);
         const module = createModule(packageJSONData.contents.name, true, repo && `${repo}/${lastItem}`);
-        const extractor: TypescriptExtractor = new TypescriptExtractor(module, lastItem, repo, typeChecker, {
-            resolveSymbol: (symbol) => {
-                for (const mod of this) {
-                    if (mod === extractor) return undefined;
-                    const ref = mod.getReferenceTypeFromSymbol(symbol);
-                    if (ref) return {...ref, external: mod.module.name};
+        const extractor: TypescriptExtractor = new TypescriptExtractor({
+            module,
+            basedir: lastItem,
+            repository: repo,
+            checker: typeChecker,
+            readme: getReadme(lastDir),
+            homepage: packageJSONData.contents.homepage,
+            hooks: {
+                resolveSymbol: (symbol) => {
+                    for (const mod of this) {
+                        if (mod === extractor) return undefined;
+                        const ref = mod.getReferenceTypeFromSymbol(symbol);
+                        if (ref) return {...ref, external: mod.module.name};
+                    }
+                    return undefined;
+                },
+                getReference: (symbol) => {
+                    for (const mod of this) {
+                        if (mod === extractor) return undefined;
+                        const ref = mod.references.get(symbol.name);
+                        if (ref) return { ...ref, external: mod.module.name };
+                    }
+                    return undefined;
                 }
-                return undefined;
-            },
-            getReference: (symbol) => {
-                for (const mod of this) {
-                    if (mod === extractor) return undefined;
-                    const ref = mod.references.get(symbol.name);
-                    if (ref) return { ...ref, external: mod.module.name }
-                }
-                return undefined;
             }
         });
         this.push(extractor);

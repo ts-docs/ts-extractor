@@ -11,9 +11,8 @@ export function getAllButLastItemFromPath(p: string) : string {
     return path.parse(p).dir;
 }
 
-
 /** Goes down */
-export function findTSConfig(basePath = process.cwd()) : ts.CompilerOptions|undefined {
+export function findTSConfigDown(basePath = process.cwd()) : ts.CompilerOptions|undefined {
     const allThings = fs.readdirSync(basePath, { withFileTypes: true});
     const files = allThings.filter(thing => thing.isFile());
     for (const file of files) {
@@ -25,10 +24,21 @@ export function findTSConfig(basePath = process.cwd()) : ts.CompilerOptions|unde
     }
     const directories = allThings.filter(thing => thing.isDirectory());
     for (const directory of directories) {
-        const res = findTSConfig(path.join(basePath, directory.name));
+        const res = findTSConfigDown(path.join(basePath, directory.name));
         if (res) return res;
     }
     return undefined;
+}
+
+export function findTSConfigUp(basePath = process.cwd()) : ts.CompilerOptions|undefined {
+    const pathToTSConfig = path.join(basePath, "tsconfig.json");
+    if (fs.existsSync(pathToTSConfig)) {
+        const res = ts.convertCompilerOptionsFromJson(undefined, basePath, "tsconfig.json");
+        if (res.errors.length) throw new Error(res.errors[0].messageText.toString());
+    }
+    const newPath = path.join(basePath, "../");
+    if (newPath === basePath) return undefined;
+    return findTSConfigUp(newPath);
 }
 
 export type PackageJSON = { 
@@ -65,4 +75,13 @@ export function getBranchName(path: string) : string|undefined {
 
 export function hasBit(num: number, bit: number) : boolean {
     return (num & bit) !== 0;
+}
+
+/** Goes up */
+export function getReadme(dir: string) : string|undefined {
+    const pathToJson = path.join(dir, "README.md");
+    if (fs.existsSync(pathToJson)) return fs.readFileSync(pathToJson, "utf-8");
+    const newPath = path.join(dir, "../");
+    if (newPath === dir) return undefined;
+    return getReadme(newPath);
 }

@@ -10,6 +10,16 @@ export interface TypescriptExtractorHooks {
     resolveSymbol: (symbol: ts.Symbol) => ReferenceType|undefined
 }
 
+export interface TypescriptExtractorSettings {
+    module: Module,
+    basedir: string,
+    repository?: string,
+    checker: ts.TypeChecker,
+    readme?: string,
+    homepage?: string,
+    hooks: TypescriptExtractorHooks
+}
+
 export class TypescriptExtractor {
     module: Module
     references: Map<string, ReferenceType>
@@ -17,17 +27,21 @@ export class TypescriptExtractor {
     currentModule: Module
     checker: ts.TypeChecker
     repository?: string
+    readme?: string
+    homepage?: string
     private moduleCache: Record<string, Module>
     private hooks: TypescriptExtractorHooks
     private namespaceCache: Record<string, Module>
-    constructor(globalModule: Module, baseDir: string, reposiotry: string|undefined, checker: ts.TypeChecker, hooks: TypescriptExtractorHooks) {
-        this.module = globalModule;
+    constructor(settings: TypescriptExtractorSettings) {
+        this.module = settings.module;
         this.currentModule = this.module;
         this.references = new Map();
-        this.baseDir = baseDir;
-        this.checker = checker;
-        this.hooks = hooks;
-        this.repository = reposiotry;
+        this.baseDir = settings.basedir;
+        this.checker = settings.checker;
+        this.readme = settings.readme;
+        this.homepage = settings.homepage;
+        this.hooks = settings.hooks;
+        this.repository = settings.repository;
         this.moduleCache = {};
         this.namespaceCache = {};
     }
@@ -55,7 +69,7 @@ export class TypescriptExtractor {
         else if (ts.isTypeAliasDeclaration(node)) return this.handleTypeDeclaration(node);
         else if (ts.isModuleDeclaration(node) && node.body && ts.isModuleBlock(node.body)) {
             const currModule = this.currentModule;
-            this.currentModule = this.namespaceCache[node.name.text]
+            this.currentModule = this.namespaceCache[node.name.text];
             for (const stmt of node.body.statements) this._visitor(stmt);
             this.currentModule = currModule;
         }
@@ -259,25 +273,25 @@ export class TypescriptExtractor {
     getReferenceTypeFromSymbol(symbol: ts.Symbol, moduleName?: string) : ReferenceType|undefined {
         const name = symbol.name;
         if (hasBit(symbol.flags, ts.SymbolFlags.Class)) return this.forEachModule<ReferenceType>(this.module, (module, path) => {
-                if ((moduleName && module.name !== moduleName) || !module.classes.has(name)) return this.hooks.resolveSymbol(symbol);;
-                return { name, path, kind: TypeReferenceKinds.CLASS }
+            if ((moduleName && module.name !== moduleName) || !module.classes.has(name)) return this.hooks.resolveSymbol(symbol);
+            return { name, path, kind: TypeReferenceKinds.CLASS };
         });
         else if (hasBit(symbol.flags, ts.SymbolFlags.Interface)) return this.forEachModule<ReferenceType>(this.module, (module, path) => {
-            if ((moduleName && module.name !== moduleName) || !module.interfaces.has(name)) return this.hooks.resolveSymbol(symbol);;
+            if ((moduleName && module.name !== moduleName) || !module.interfaces.has(name)) return this.hooks.resolveSymbol(symbol);
             return { name, path, kind: TypeReferenceKinds.INTERFACE };
         });
         else if (hasBit(symbol.flags, ts.SymbolFlags.Enum)) {
             return this.forEachModule<ReferenceType>(this.module, (module, path) => {
-            if ((moduleName && module.name !== moduleName) || !module.enums.has(name)) return this.hooks.resolveSymbol(symbol);
-            return { name, path, kind: TypeReferenceKinds.ENUM };
-        });
-    }
+                if ((moduleName && module.name !== moduleName) || !module.enums.has(name)) return this.hooks.resolveSymbol(symbol);
+                return { name, path, kind: TypeReferenceKinds.ENUM };
+            });
+        }
         else if (hasBit(symbol.flags, ts.SymbolFlags.TypeAlias)) return this.forEachModule<ReferenceType>(this.module, (module, path) => {
             if ( (moduleName && module.name !== moduleName) || !module.types.has(name) ) return this.hooks.resolveSymbol(symbol);
             return { name, path, kind: TypeReferenceKinds.TYPE_ALIAS };
         });
         else return this.forEachModule<ReferenceType>(this.module, (module, path) => {
-            if ((moduleName && module.name !== moduleName)) return this.hooks.resolveSymbol(symbol);;
+            if ((moduleName && module.name !== moduleName)) return this.hooks.resolveSymbol(symbol);
             if (module.classes.has(name)) return { name, path, kind: TypeReferenceKinds.CLASS };
             else if (module.interfaces.has(name)) return { name, path, kind: TypeReferenceKinds.INTERFACE };
             else if (module.enums.has(name)) return { name, path, kind: TypeReferenceKinds.ENUM};
@@ -287,17 +301,17 @@ export class TypescriptExtractor {
     }
 
     resolveSymbol(symbol: ts.Symbol, typeParameters?: Type[], name?: string) : Type {
-        if (EXCLUDED_TYPE_REFS.includes(symbol.name)) return { type: { name: symbol.name, kind: TypeReferenceKinds.DEFAULT_API }, typeParameters, kind: TypeKinds.REFERENCE }
+        if (EXCLUDED_TYPE_REFS.includes(symbol.name)) return { type: { name: symbol.name, kind: TypeReferenceKinds.DEFAULT_API }, typeParameters, kind: TypeKinds.REFERENCE };
         const symbolRef = this.references.get(symbol.name) || this.hooks.getReference(symbol);
         if (symbolRef) return { type: symbolRef, typeParameters, kind: TypeKinds.REFERENCE };
-        const ref = this.getReferenceTypeFromSymbol(symbol);
+        const ref = this.getReferenceTypeFromSymbol(symbol, name);
         if (!ref) return { name: symbol.name, kind: TypeKinds.UNKNOWN };
         if (!ref.external) this.references.set(symbol.name, ref);
         return {type: ref, typeParameters, kind: TypeKinds.REFERENCE};
     }
 
     resolveType(type: ts.Node) : Type {
-         if (ts.isTypeReferenceNode(type)) {
+        if (ts.isTypeReferenceNode(type)) {
             const symbol = this.checker.getSymbolAtLocation(type.typeName);
             const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg));
             if (!symbol) return {
@@ -351,30 +365,30 @@ export class TypescriptExtractor {
         else if (ts.isTypeOperatorNode(type)) {
             let kind;
             switch (type.operator) {
-                case ts.SyntaxKind.UniqueKeyword:
-                    kind = TypeKinds.UNIQUE_OPERATOR;
-                    break;
-                case ts.SyntaxKind.KeyOfKeyword:
-                    kind = TypeKinds.KEYOF_OPERATOR;
-                    break;
-                case ts.SyntaxKind.ReadonlyKeyword:
-                    kind = TypeKinds.READONLY_OPERATOR;
+            case ts.SyntaxKind.UniqueKeyword:
+                kind = TypeKinds.UNIQUE_OPERATOR;
+                break;
+            case ts.SyntaxKind.KeyOfKeyword:
+                kind = TypeKinds.KEYOF_OPERATOR;
+                break;
+            case ts.SyntaxKind.ReadonlyKeyword:
+                kind = TypeKinds.READONLY_OPERATOR;
             }
             return {
                 kind,
                 type: this.resolveType(type.type)
-            }
+            };
         }
         else if (ts.isArrayTypeNode(type)) {
             return {
                 type: this.resolveType(type.elementType),
                 kind: TypeKinds.ARRAY_TYPE
-            }
+            };
         }
         else if (ts.isParenthesizedTypeNode(type)) return this.resolveType(type.type);
         else if (ts.isThisTypeNode(type)) {
             const symbol = this.checker.getSymbolAtLocation(type);
-            if (!symbol) return { name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };;
+            if (!symbol) return { name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
             return this.resolveSymbol(symbol);
         }
         else switch (type.kind) {
@@ -452,7 +466,7 @@ export class TypescriptExtractor {
     }
 
     getJSDocData(node: ts.Node) : Array<JSDocData>|undefined {
-        //@ts-expect-error Internal access - Why is this internal??
+        //@ts-expect-error Internal access - Why is this internal?
         const jsDoc = node.jsDoc as Array<ts.JSDoc>;
         if (!jsDoc || !jsDoc.length) return undefined;
         const res: Array<JSDocData> = [];
@@ -497,7 +511,12 @@ export class TypescriptExtractor {
     }
 
     toJSON() : Record<string, unknown> {
-        return this.moduleToJSON();
+        return {
+            readme: this.readme,
+            repository: this.repository,
+            homepage: this.homepage,
+            module: this.moduleToJSON()
+        };
     }
 
 } 

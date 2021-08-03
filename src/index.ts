@@ -1,12 +1,11 @@
 
 import ts from "typescript";
 import path from "path";
-import { findTSConfig  } from "./util";
+import { findPackageJSON, findTSConfigDown, getReadme, getRepository  } from "./util";
 import { ExtractorList } from "./extractor/ExtractorList";
 
-
 export function extract(rootFiles: Array<string>) : [ExtractorList, ts.CompilerOptions] {
-    const tsconfig = findTSConfig();
+    const tsconfig = findTSConfigDown();
     if (!tsconfig) throw new Error("Couldn't find tsconfig.json");
 
     const extractors = new ExtractorList();
@@ -38,3 +37,23 @@ export function extract(rootFiles: Array<string>) : [ExtractorList, ts.CompilerO
 
     return [extractors, tsconfig];
 }
+
+export interface ProjectMetadata {
+    readme?: string,
+    homepage?: string,
+    version?: string,
+    repository?: string
+}
+
+export function extractMetadata(directory: string) : ProjectMetadata {
+    const packageJSON = findPackageJSON(directory);
+    return {
+        readme: getReadme(directory),
+        homepage: packageJSON && packageJSON.contents.homepage,
+        version: packageJSON && packageJSON.contents.version,
+        repository: packageJSON && getRepository(packageJSON)
+    };
+}
+
+export { TypescriptExtractor } from "./extractor";
+export { ExtractorList } from "./extractor/ExtractorList";
