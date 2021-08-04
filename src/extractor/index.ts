@@ -1,5 +1,5 @@
 
-import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeOrLiteral, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData, InterfaceDecl, ClassDecl, TypeDecl, Loc, JSDocTag } from "../structure";
+import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, ReferenceType, JSDocData, InterfaceDecl, ClassDecl, TypeDecl, Loc, JSDocTag, TypeReferenceKinds, Type } from "../structure";
 import ts from "typescript";
 import { getLastItemFromPath, hasBit } from "../util";
 
@@ -274,52 +274,55 @@ export class TypescriptExtractor {
         const name = symbol.name;
         if (hasBit(symbol.flags, ts.SymbolFlags.Class)) return this.forEachModule<ReferenceType>(this.module, (module, path) => {
             if ((moduleName && module.name !== moduleName) || !module.classes.has(name)) return this.hooks.resolveSymbol(symbol);
-            return { name, path, kind: TypeKinds.CLASS };
+            return { name, path, kind: TypeReferenceKinds.CLASS };
         });
         else if (hasBit(symbol.flags, ts.SymbolFlags.Interface)) return this.forEachModule<ReferenceType>(this.module, (module, path) => {
             if ((moduleName && module.name !== moduleName) || !module.interfaces.has(name)) return this.hooks.resolveSymbol(symbol);
-            return { name, path, kind: TypeKinds.INTERFACE };
+            return { name, path, kind: TypeReferenceKinds.INTERFACE };
         });
         else if (hasBit(symbol.flags, ts.SymbolFlags.Enum)) {
             return this.forEachModule<ReferenceType>(this.module, (module, path) => {
                 if ((moduleName && module.name !== moduleName) || !module.enums.has(name)) return this.hooks.resolveSymbol(symbol);
-                return { name, path, kind: TypeKinds.ENUM };
+                return { name, path, kind: TypeReferenceKinds.ENUM };
             });
         }
         else if (hasBit(symbol.flags, ts.SymbolFlags.TypeAlias)) return this.forEachModule<ReferenceType>(this.module, (module, path) => {
             if ( (moduleName && module.name !== moduleName) || !module.types.has(name) ) return this.hooks.resolveSymbol(symbol);
-            return { name, path, kind: TypeKinds.TYPE_ALIAS };
+            return { name, path, kind: TypeReferenceKinds.TYPE_ALIAS };
         });
         else return this.forEachModule<ReferenceType>(this.module, (module, path) => {
             if ((moduleName && module.name !== moduleName)) return this.hooks.resolveSymbol(symbol);
-            if (module.classes.has(name)) return { name, path, kind: TypeKinds.CLASS };
-            else if (module.interfaces.has(name)) return { name, path, kind: TypeKinds.INTERFACE };
-            else if (module.enums.has(name)) return { name, path, kind: TypeKinds.ENUM};
-            else if (module.types.has(name)) return { name, path, kind: TypeKinds.TYPE_ALIAS };
+            if (module.classes.has(name)) return { name, path, kind: TypeReferenceKinds.CLASS };
+            else if (module.interfaces.has(name)) return { name, path, kind: TypeReferenceKinds.INTERFACE };
+            else if (module.enums.has(name)) return { name, path, kind: TypeReferenceKinds.ENUM};
+            else if (module.types.has(name)) return { name, path, kind: TypeReferenceKinds.TYPE_ALIAS };
             return undefined;
         });
     }
 
-    resolveSymbol(symbol: ts.Symbol, typeParameters?: TypeOrLiteral[], name?: string) : TypeOrLiteral {
-        if (EXCLUDED_TYPE_REFS.includes(symbol.name)) return { type: { name: symbol.name, kind: TypeKinds.DEFAULT_API }, typeParameters };
+    resolveSymbol(symbol: ts.Symbol, typeParameters?: Type[], name?: string) : Type {
+        if (EXCLUDED_TYPE_REFS.includes(symbol.name)) return { type: { name: symbol.name, kind: TypeReferenceKinds.DEFAULT_API }, typeParameters, kind: TypeKinds.REFERENCE };
         const symbolRef = this.references.get(symbol.name) || this.hooks.getReference(symbol);
-        if (symbolRef) return { type: symbolRef, typeParameters};
-        const ref = this.getReferenceTypeFromSymbol(symbol, name) || { name: symbol.name, kind: TypeKinds.UNKNOWN };
+        if (symbolRef) return { type: symbolRef, typeParameters, kind: TypeKinds.REFERENCE };
+        const ref = this.getReferenceTypeFromSymbol(symbol, name);
+        if (!ref) return { name: symbol.name, kind: TypeKinds.UNKNOWN };
         if (!ref.external) this.references.set(symbol.name, ref);
-        return {type: ref, typeParameters};
+        return {type: ref, typeParameters, kind: TypeKinds.REFERENCE};
     }
 
-    resolveType(type: ts.Node) : TypeOrLiteral {
+    resolveType(type: ts.Node) : Type {
         if (ts.isTypeReferenceNode(type)) {
             const symbol = this.checker.getSymbolAtLocation(type.typeName);
             const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg));
             if (!symbol) return {
-                type: { name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN},
+                type: { name: type.getText(), kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN },
                 typeParameters,
+                kind: TypeKinds.REFERENCE
             };
             if (hasBit(symbol.flags, ts.SymbolFlags.TypeParameter)) return {
-                type: { name: symbol.name, kind: TypeKinds.TYPE_PARAMETER},
-                typeParameters
+                type: { name: symbol.name, kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN },
+                typeParameters,
+                kind: TypeKinds.REFERENCE
             };
             if (hasBit(symbol.flags, ts.SymbolFlags.ModuleMember) && symbol.declarations && ts.isModuleBlock(symbol.declarations[0].parent)) {
                 const bod = symbol.declarations[0].parent.parent;
@@ -420,19 +423,21 @@ export class TypescriptExtractor {
         };
     }
 
-    resolveHeritage(param: ts.ExpressionWithTypeArguments) : TypeOrLiteral {
+    resolveHeritage(param: ts.ExpressionWithTypeArguments) : Type {
         const symbol = this.checker.getSymbolAtLocation(param.expression);
         if (!ts.isIdentifier(param.expression) || !symbol) return {
             type: {
                 name: param.expression.getText(),
-                kind: TypeKinds.STRINGIFIED_UNKNOWN
+                kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN
             },
-            typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))
+            typeParameters: param.typeArguments?.map(arg => this.resolveType(arg)),
+            kind: TypeKinds.REFERENCE
         };
         return {
             type: this.resolveSymbol(symbol),
-            typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))
-        } as Reference;
+            typeParameters: param.typeArguments?.map(arg => this.resolveType(arg)),
+            kind: TypeKinds.REFERENCE
+        };
     }
     
 

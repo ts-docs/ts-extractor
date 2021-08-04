@@ -18,7 +18,7 @@ export interface JSDocTag {
     name: string,
     comment?: string,
     arg?: string,
-    type?: TypeOrLiteral
+    type?: Type
 }
 
 export interface JSDocData {
@@ -69,11 +69,18 @@ export function createModule(name: string, isGlobal?: boolean, repository?: stri
 }
 
 export const enum TypeKinds {
-    CLASS,
-    INTERFACE,
-    ENUM,
-    FUNCTION,
-    CONSTANT,
+    REFERENCE,
+    ARROW_FUNCTION,
+    OBJECT_LITERAL,
+    TUPLE,
+    UNION,
+    UNIQUE_OPERATOR,
+    READONLY_OPERATOR,
+    KEYOF_OPERATOR,
+    UNKNOWN,
+    STRINGIFIED_UNKNOWN,
+    ARRAY_TYPE,
+    INTERSECTION,
     NUMBER,
     STRING,
     BOOLEAN,
@@ -83,20 +90,22 @@ export const enum TypeKinds {
     UNDEFINED,
     NULL,
     ANY,
-    STRINGIFIED_UNKNOWN,
-    UNKNOWN,
-    ARROW_FUNCTION,
-    OBJECT_LITERAL,
+}
+
+export const enum TypeReferenceKinds {
+    CLASS,
+    INTERFACE,
+    ENUM,
+    FUNCTION,
+    CONSTANT,
     TYPE_ALIAS,
-    TUPLE,
     TYPE_PARAMETER,
-    UNION,
+    UNKNOWN,
+    STRINGIFIED_UNKNOWN,
     UNIQUE_OPERATOR,
     READONLY_OPERATOR,
     KEYOF_OPERATOR,
-    ARRAY_TYPE,
     DEFAULT_API,
-    INTERSECTION
 }
 
 
@@ -104,26 +113,26 @@ export interface ReferenceType {
     name: string,
     path?: Array<string>,
     external?: string,
+    kind: TypeReferenceKinds
+}
+
+export interface BaseType {
     kind: TypeKinds
 }
 
-export interface Reference {
+export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType;
+
+export interface Reference extends BaseType {
     type: ReferenceType,
-    typeParameters?: Array<TypeOrLiteral>
+    typeParameters?: Array<Type>
 }
 
-export interface Type {
-    kind: TypeKinds
-}
-
-export interface Literal extends Type {
+export interface Literal extends BaseType {
     name: string
 }
 
-export type TypeOrLiteral = Reference | ObjectLiteral | ArrowFunction | UnionOrIntersection | Literal | TypeOperator | ArrayType;
-
 export interface TypeParameter extends Node {
-    default?: TypeOrLiteral,
+    default?: Type,
     constraint?: Reference
 }
 
@@ -136,7 +145,7 @@ export interface ClassMember extends Node {
 }
 
 export interface ClassProperty extends ClassMember {
-    type?: TypeOrLiteral,
+    type?: Type,
     isOptional?: boolean,
     isReadonly?: boolean,
     exclamation?: boolean
@@ -144,7 +153,7 @@ export interface ClassProperty extends ClassMember {
 
 export interface FunctionParameter {
     name: string,
-    type?: TypeOrLiteral,
+    type?: Type,
     rest?: boolean,
     isOptional?: boolean,
     defaultValue?: string,
@@ -153,16 +162,12 @@ export interface FunctionParameter {
 
 export interface ClassMethod extends ClassMember {
     typeParameters?: Array<TypeParameter>,
-    returnType?: TypeOrLiteral,
+    returnType?: Type,
     parameters?: Array<FunctionParameter>
 }
 
 export type Constructor = Omit<ArrowFunction, "kind">
 
-export interface ClassEvent {
-    name: string,
-
-}
 
 export interface ClassDecl extends PotentiallyNamelessNode {
     typeParameters?: Array<TypeParameter>,
@@ -170,72 +175,72 @@ export interface ClassDecl extends PotentiallyNamelessNode {
     methods: Array<ClassMethod>,
     extends?: Reference,
     constructor?: Constructor,
-    implements?: Array<TypeOrLiteral>,
+    implements?: Array<Type>,
     isAbstract?: boolean
 }
 
 export interface FunctionDecl extends PotentiallyNamelessNode {
     typeParameters?: Array<TypeParameter>,
-    returnType?: TypeOrLiteral,
+    returnType?: Type,
     parameters: Array<FunctionParameter>
 }
 
 // (...parameters) => returnValue
-export interface ArrowFunction extends Type {
+export interface ArrowFunction extends BaseType {
     typeParameters?: Array<TypeParameter>,
-    returnType?: TypeOrLiteral,
+    returnType?: Type,
     parameters?: Array<FunctionParameter>
 }
 
 export interface IndexSignatureDeclaration {
-    key?: TypeOrLiteral,
-    type: TypeOrLiteral
+    key?: Type,
+    type: Type
 }
 
 // { a: type }
-export interface ObjectLiteral extends Type {
+export interface ObjectLiteral extends BaseType {
     properties: Array<InterfaceProperty|IndexSignatureDeclaration>,
 }
 
 // a | b , a & b
-export interface UnionOrIntersection  extends Type {
-    types: Array<TypeOrLiteral>
+export interface UnionOrIntersection  extends BaseType {
+    types: Array<Type>
 }
 
 // keyof a, unqiue a, readonly a
-export interface TypeOperator extends Type {
-    type: TypeOrLiteral
+export interface TypeOperator extends BaseType {
+    type: Type
 }
 
 // [a, b, c]
-export interface Tuple extends Type {
-    types: Array<TypeOrLiteral>,
+export interface Tuple extends BaseType {
+    types: Array<Type>,
 }
 
 // a[]
-export interface ArrayType extends Type {
-    type: TypeOrLiteral
+export interface ArrayType extends BaseType {
+    type: Type
 }
 
 export interface InterfaceProperty {
     name: string,
-    type?: TypeOrLiteral,
+    type?: Type,
     isReadonly?: boolean,
     isOptional: boolean
 }
 
 export interface InterfaceDecl extends NodeWithManyLOC {
     properties: Array<InterfaceProperty|IndexSignatureDeclaration>,
-    extends?: TypeOrLiteral,
-    implements?: Array<TypeOrLiteral>
+    extends?: Type,
+    implements?: Array<Type>
 }
 
 export interface TypeDecl extends Node {
-    value?: TypeOrLiteral
+    value?: Type
 }
 
 export interface ConstantDecl extends Node {
-    type?: TypeOrLiteral|undefined,
+    type?: Type|undefined,
     content?: string
 }
 
