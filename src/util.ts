@@ -30,17 +30,6 @@ export function findTSConfigDown(basePath = process.cwd()) : ts.CompilerOptions|
     return undefined;
 }
 
-export function findTSConfigUp(basePath = process.cwd()) : ts.CompilerOptions|undefined {
-    const pathToTSConfig = path.join(basePath, "tsconfig.json");
-    if (fs.existsSync(pathToTSConfig)) {
-        const res = ts.convertCompilerOptionsFromJson(undefined, basePath, "tsconfig.json");
-        if (res.errors.length) throw new Error(res.errors[0].messageText.toString());
-    }
-    const newPath = path.join(basePath, "../");
-    if (newPath === basePath) return undefined;
-    return findTSConfigUp(newPath);
-}
-
 export type PackageJSON = { 
     contents: Record<string, string>,
     path: string
