@@ -235,6 +235,7 @@ export interface InterfaceProperty {
 
 export interface InterfaceDecl extends NodeWithManyLOC {
     properties: Array<InterfaceProperty|IndexSignatureDeclaration>,
+    typeParameters?: Array<TypeParameter>
     extends?: Type,
     implements?: Array<Type>
 }
