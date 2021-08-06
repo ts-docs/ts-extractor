@@ -160,10 +160,14 @@ export interface FunctionParameter {
     jsDoc: JSDocData
 }
 
-export interface ClassMethod extends ClassMember {
+export interface FunctionSignature extends PotentiallyNamelessNode {
+    parameters?: Array<FunctionParameter>,
     typeParameters?: Array<TypeParameter>,
-    returnType?: Type,
-    parameters?: Array<FunctionParameter>
+    returnType?: Type
+}
+
+export interface ClassMethod extends ClassMember {
+    signatures: Array<FunctionSignature>
 }
 
 export type Constructor = Omit<ArrowFunction, "kind">
