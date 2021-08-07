@@ -188,6 +188,7 @@ export class TypescriptExtractor {
                     type: member.type && this.resolveType(member.type),
                     loc: this.getLOC(member, sourceFile),
                     isOptional: Boolean(member.questionToken),
+                    initializer: member.initializer && this.resolveExpressionToType(member.initializer),
                     isPrivate, isProtected, isStatic, isReadonly, isAbstract, 
                     jsDoc: this.getJSDocData(member)
                 });
@@ -381,6 +382,12 @@ export class TypescriptExtractor {
         case ts.SyntaxKind.UnknownKeyword: return { name: "unknown", kind: TypeKinds.UNKNOWN };
         default: return {name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
         }
+    }
+
+    resolveExpressionToType(exp: ts.Node) : Type|undefined {
+        if (ts.isNewExpression(exp) && ts.isIdentifier(exp.expression)) return this.resolveSymbol(exp.expression.text);
+        else if (ts.isLiteralExpression(exp)) return { name: exp.text, kind: TypeKinds.STRINGIFIED_UNKNOWN };
+        return;
     }
 
     resolveGenerics(generic: ts.TypeParameterDeclaration) : TypeParameter {

@@ -148,7 +148,8 @@ export interface ClassProperty extends ClassMember {
     type?: Type,
     isOptional?: boolean,
     isReadonly?: boolean,
-    exclamation?: boolean
+    exclamation?: boolean,
+    initializer?: Type
 }
 
 export interface FunctionParameter {
