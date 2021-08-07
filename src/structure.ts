@@ -4,7 +4,7 @@ export interface Module {
     name: string,
     modules: Map<string, Module>,
     classes: Map<string, ClassDecl>,
-    functions: Array<FunctionDecl>,
+    functions: Map<string, FunctionDecl>,
     interfaces: Map<string, InterfaceDecl>,
     types: Map<string, TypeDecl>,
     enums: Map<string, EnumDecl>,
@@ -38,15 +38,14 @@ export interface Node {
     isExported?: boolean
 }
 
-export type PotentiallyNamelessNode = {
-    name?: string,
+export interface NamelessNode {
     loc: Loc
     jsDoc?: Array<JSDocData>,
     isExported?: boolean
-};
+}
 
 export type NodeWithManyLOC = {
-    name?: string,
+    name: string,
     jsDoc?: Array<JSDocData>,
     isExported?: boolean
     loc: Array<Loc>
@@ -58,7 +57,7 @@ export function createModule(name: string, isGlobal?: boolean, repository?: stri
         repository,
         modules: new Map(),
         classes: new Map(),
-        functions: [],
+        functions: new Map(),
         interfaces: new Map(),
         types: new Map(),
         enums: new Map(),
@@ -105,12 +104,14 @@ export const enum TypeReferenceKinds {
     UNIQUE_OPERATOR,
     READONLY_OPERATOR,
     KEYOF_OPERATOR,
+    ENUM_MEMBER,
     DEFAULT_API,
 }
 
 
 export interface ReferenceType {
     name: string,
+    displayName?: string,
     path?: Array<string>,
     external?: string,
     kind: TypeReferenceKinds
@@ -161,7 +162,7 @@ export interface FunctionParameter {
     jsDoc: JSDocData
 }
 
-export interface FunctionSignature extends PotentiallyNamelessNode {
+export interface FunctionSignature extends NamelessNode {
     parameters?: Array<FunctionParameter>,
     typeParameters?: Array<TypeParameter>,
     returnType?: Type
@@ -174,7 +175,7 @@ export interface ClassMethod extends ClassMember {
 export type Constructor = Omit<ArrowFunction, "kind">
 
 
-export interface ClassDecl extends PotentiallyNamelessNode {
+export interface ClassDecl extends Node {
     typeParameters?: Array<TypeParameter>,
     properties: Array<ClassProperty>,
     methods: Array<ClassMethod>,
@@ -184,10 +185,8 @@ export interface ClassDecl extends PotentiallyNamelessNode {
     isAbstract?: boolean
 }
 
-export interface FunctionDecl extends PotentiallyNamelessNode {
-    typeParameters?: Array<TypeParameter>,
-    returnType?: Type,
-    parameters: Array<FunctionParameter>
+export interface FunctionDecl extends Node {
+    signatures: Array<FunctionSignature>
 }
 
 // (...parameters) => returnValue

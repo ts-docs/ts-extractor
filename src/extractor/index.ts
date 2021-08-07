@@ -71,8 +71,9 @@ export class TypescriptExtractor {
     private _preparer(node: ts.Node) : void {
         const sourceFile = node.getSourceFile();
         if (ts.isClassDeclaration(node)) {
-            this.currentModule.classes.set(node.name?.text || "export default", {
-                name: node.name?.text || "export default",
+            const name = node.name ? node.name.text : "export default";
+            this.currentModule.classes.set(name, {
+                name,
                 typeParameters: [],
                 properties: [],
                 methods: [],
@@ -142,14 +143,26 @@ export class TypescriptExtractor {
     }
 
     handleFunctionDeclaration(node: ts.FunctionDeclaration) : void {
-        this.currentModule.functions.push({
+        const name = node.name ? node.name.text : "export default";
+        const fn = this.currentModule.functions.get(name);
+        const obj = {
             name: node.name?.text,
             parameters: node.parameters.map(p => this.resolveParameter(p)),
             typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p)),
             returnType: node.type && this.resolveType(node.type),
             loc: this.getLOC(node),
             jsDoc: this.getJSDocData(node)
-        });
+            };
+        if (fn) {
+            fn.signatures.push(obj);
+        } else {
+            this.currentModule.functions.set(name, {
+                name, 
+                signatures: [obj],
+                loc: this.getLOC(node),
+                jsDoc: this.getJSDocData(node)
+            });
+        }
     }
 
     handleVariableDeclaration(node: ts.VariableStatement) : void {
@@ -160,6 +173,7 @@ export class TypescriptExtractor {
                 name: declaration.name.getText(),
                 loc: this.getLOC(declaration),
                 type: declaration.type ? this.resolveType(declaration.type) : undefined,
+                content: declaration.initializer && `${declaration.initializer.getText().slice(0, 256)}...`,
                 jsDoc: this.getJSDocData(node)
             });
         }
@@ -306,6 +320,20 @@ export class TypescriptExtractor {
                 typeParameters,
                 kind: TypeKinds.REFERENCE
             };
+            if (hasBit(symbol.flags, ts.SymbolFlags.EnumMember) && symbol.valueDeclaration && ts.isEnumDeclaration(symbol.valueDeclaration.parent)) {
+                const thing = this.references.resolveSymbol(symbol.valueDeclaration.parent.name.text, this);
+                if (!thing) return { kind: TypeKinds.UNKNOWN };
+                return {
+                    kind: TypeKinds.REFERENCE,
+                    type: {
+                        displayName: symbol.name,
+                        name: thing.name,
+                        path: thing.path,
+                        external: thing.external,
+                        kind: TypeReferenceKinds.ENUM_MEMBER
+                    }
+                }
+            }
             return this.resolveSymbol(symbol, typeParameters);
         }
         else if (ts.isFunctionTypeNode(type)) {
@@ -478,6 +506,7 @@ export class TypescriptExtractor {
         clone.interfaces = [...module.interfaces.values()];
         clone.types = [...module.types.values()];
         clone.enums = [...module.enums.values()];
+        clone.functions = [...module.functions.values()];
         for (const [, mod] of module.modules) {
             (clone.modules as Array<Record<string, unknown>>).push(this.moduleToJSON(mod));
         }
