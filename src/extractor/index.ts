@@ -370,13 +370,15 @@ export class TypescriptExtractor {
             return this.resolveSymbol(symbol);
         }
         else switch (type.kind) {
+        //@ts-expect-error This shouldn't be erroring!
+        case ts.SyntaxKind.LiteralType: return this.resolveType((type as unknown as ts.LiteralType).literal);
         case ts.SyntaxKind.NumberKeyword: return {name: "number", kind: TypeKinds.NUMBER};
         case ts.SyntaxKind.StringKeyword: return {name: "string", kind: TypeKinds.STRING};
         case ts.SyntaxKind.BooleanKeyword: return {name: "boolean", kind: TypeKinds.BOOLEAN};
         case ts.SyntaxKind.TrueKeyword: return { name: "true", kind: TypeKinds.TRUE};
         case ts.SyntaxKind.FalseKeyword: return { name: "false", kind: TypeKinds.FALSE};
         case ts.SyntaxKind.UndefinedKeyword: return { name: "undefined", kind: TypeKinds.UNDEFINED};
-        case ts.SyntaxKind.NullKeyword: return { name: "null", kind: TypeKinds.NULL};
+        case ts.SyntaxKind.NullKeyword: return { name: "null", kind: TypeKinds.NULL };
         case ts.SyntaxKind.VoidKeyword: return { name: "void", kind: TypeKinds.VOID };
         case ts.SyntaxKind.AnyKeyword: return { name: "any", kind: TypeKinds.ANY };
         case ts.SyntaxKind.UnknownKeyword: return { name: "unknown", kind: TypeKinds.UNKNOWN };
@@ -385,6 +387,7 @@ export class TypescriptExtractor {
     }
 
     resolveExpressionToType(exp: ts.Node) : Type|undefined {
+        console.log(ts.isNewExpression(exp));
         if (ts.isNewExpression(exp) && ts.isIdentifier(exp.expression)) return this.resolveSymbol(exp.expression.text);
         else if (ts.isLiteralExpression(exp)) return { name: exp.text, kind: TypeKinds.STRINGIFIED_UNKNOWN };
         return;
