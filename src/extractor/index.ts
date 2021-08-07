@@ -387,7 +387,6 @@ export class TypescriptExtractor {
     }
 
     resolveExpressionToType(exp: ts.Node) : Type|undefined {
-        console.log(ts.isNewExpression(exp));
         if (ts.isNewExpression(exp) && ts.isIdentifier(exp.expression)) return this.resolveSymbol(exp.expression.text);
         else if (ts.isLiteralExpression(exp)) return { name: exp.text, kind: TypeKinds.STRINGIFIED_UNKNOWN };
         return;
