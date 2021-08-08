@@ -149,7 +149,7 @@ export class TypescriptExtractor {
             name: node.name?.text,
             parameters: node.parameters.map(p => this.resolveParameter(p)),
             typeParameters: node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p)),
-            returnType: node.type && this.resolveType(node.type),
+            returnType: this.resolveReturnType(node),
             loc: this.getLOC(node),
             jsDoc: this.getJSDocData(node)
             };
@@ -212,7 +212,7 @@ export class TypescriptExtractor {
                 if (methods.has(methodName)) {
                     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                     methods.get(methodName)!.signatures.push({
-                        returnType: member.type && this.resolveType(member.type),
+                        returnType: this.resolveReturnType(member),
                         typeParameters: member.typeParameters && member.typeParameters.map(p => this.resolveGenerics(p)),
                         parameters: member.parameters.map(p => this.resolveParameter(p)),
                         loc: this.getLOC(member, sourceFile),
@@ -225,7 +225,7 @@ export class TypescriptExtractor {
                         isPrivate, isProtected, isStatic, isAbstract,
                         jsDoc: this.getJSDocData(member),
                         signatures: [{
-                            returnType: member.type && this.resolveType(member.type),
+                            returnType: this.resolveReturnType(member),
                             typeParameters: member.typeParameters && member.typeParameters.map(p => this.resolveGenerics(p)),
                             parameters: member.parameters.map(p => this.resolveParameter(p)),
                             loc: this.getLOC(member, sourceFile),
@@ -300,21 +300,7 @@ export class TypescriptExtractor {
     }
 
     resolveSymbol(symbol: ts.Symbol|string, typeParameters?: Type[], moduleName?: string) : Type {
-        const symbolRef = this.references.resolveSymbol(symbol, this, moduleName);
-        if (symbolRef) return { type: symbolRef, typeParameters, kind: TypeKinds.REFERENCE };
-        return { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeKinds.UNKNOWN };
-    }
-
-    resolveType(type: ts.Node) : Type {
-        if (ts.isTypeReferenceNode(type)) {
-            const symbol = this.checker.getSymbolAtLocation(type.typeName);
-            const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg));
-            if (!symbol) return {
-                type: { name: type.getText(), kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN },
-                typeParameters,
-                kind: TypeKinds.REFERENCE
-            };
-            if (symbol.name === "unknown" && ts.isQualifiedName(type.typeName)) return this.resolveSymbol(type.typeName.right.text, typeParameters, type.typeName.left.getText());
+        if (typeof symbol !== "string") {
             if (hasBit(symbol.flags, ts.SymbolFlags.TypeParameter)) return {
                 type: { name: symbol.name, kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN },
                 typeParameters,
@@ -334,6 +320,22 @@ export class TypescriptExtractor {
                     }
                 }
             }
+        }
+        const symbolRef = this.references.resolveSymbol(symbol, this, moduleName);
+        if (symbolRef) return { type: symbolRef, typeParameters, kind: TypeKinds.REFERENCE };
+        return { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeKinds.UNKNOWN };
+    }
+
+    resolveType(type: ts.Node) : Type {
+        if (ts.isTypeReferenceNode(type)) {
+            const symbol = this.checker.getSymbolAtLocation(type.typeName);
+            const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg));
+            if (!symbol) return {
+                type: { name: type.getText(), kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN },
+                typeParameters,
+                kind: TypeKinds.REFERENCE
+            };
+            if (symbol.name === "unknown" && ts.isQualifiedName(type.typeName)) return this.resolveSymbol(type.typeName.right.text, typeParameters, type.typeName.left.getText());
             return this.resolveSymbol(symbol, typeParameters);
         }
         else if (ts.isFunctionTypeNode(type)) {
@@ -450,6 +452,23 @@ export class TypescriptExtractor {
             kind: TypeKinds.REFERENCE
         };
     }
+
+    resolveReturnType(fn: ts.MethodDeclaration|ts.FunctionDeclaration) : Type|undefined {
+        if (fn.type) return this.resolveType(fn.type);
+        const sig = this.checker.getSignatureFromDeclaration(fn);
+        if (!sig) return;
+        const type = this.checker.getReturnTypeOfSignature(sig);
+        if (!type) return;
+        const sym = type.getSymbol();
+        if (!sym) return;
+        //@ts-expect-error Internal API
+        return this.resolveSymbol(sym, type.resolvedTypeArguments && type.resolvedTypeArguments.map(t => {
+            const symbol = t.getSymbol();
+            if (!symbol) return { kind: TypeKinds.ANY, name: "any" };
+            return this.resolveSymbol(symbol);
+        }));
+        
+    } 
     
 
     resolveProperty(prop: ts.TypeElement) : InterfaceProperty|IndexSignatureDeclaration {
