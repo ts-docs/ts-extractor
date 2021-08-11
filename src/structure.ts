@@ -149,8 +149,7 @@ export interface ClassProperty extends ClassMember {
     type?: Type,
     isOptional?: boolean,
     isReadonly?: boolean,
-    exclamation?: boolean,
-    initializer?: Type
+    exclamation?: boolean
 }
 
 export interface FunctionParameter {
@@ -169,7 +168,9 @@ export interface FunctionSignature extends NamelessNode {
 }
 
 export interface ClassMethod extends ClassMember {
-    signatures: Array<FunctionSignature>
+    signatures: Array<FunctionSignature>,
+    isGetter?: boolean,
+    isSetter?: boolean
 }
 
 export type Constructor = Omit<ArrowFunction, "kind">

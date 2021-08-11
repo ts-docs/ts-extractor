@@ -152,7 +152,7 @@ export class TypescriptExtractor {
             returnType: this.resolveReturnType(node),
             loc: this.getLOC(node),
             jsDoc: this.getJSDocData(node)
-            };
+        };
         if (fn) {
             fn.signatures.push(obj);
         } else {
@@ -169,11 +169,12 @@ export class TypescriptExtractor {
         const declarations: Array<ConstantDecl> = [];
         for (const declaration of node.declarationList.declarations) {
             if (!declaration.initializer) continue;
+            const text = declaration.initializer && declaration.initializer.getText();
             declarations.push({
                 name: declaration.name.getText(),
                 loc: this.getLOC(declaration),
                 type: declaration.type ? this.resolveType(declaration.type) : undefined,
-                content: declaration.initializer && `${declaration.initializer.getText().slice(0, 256)}...`,
+                content: text && text.length > 256 ? text.slice(0, 256) + "...":text,
                 jsDoc: this.getJSDocData(node)
             });
         }
@@ -199,10 +200,9 @@ export class TypescriptExtractor {
             if (ts.isPropertyDeclaration(member)) {
                 res.properties.push({
                     name: member.name.getText(),
-                    type: member.type && this.resolveType(member.type),
+                    type: (member.type && this.resolveType(member.type)) || (member.initializer && this.resolveExpressionToType(member.initializer)),
                     loc: this.getLOC(member, sourceFile),
                     isOptional: Boolean(member.questionToken),
-                    initializer: member.initializer && this.resolveExpressionToType(member.initializer),
                     isPrivate, isProtected, isStatic, isReadonly, isAbstract, 
                     jsDoc: this.getJSDocData(member)
                 });
@@ -233,6 +233,37 @@ export class TypescriptExtractor {
                         }]                        
                     });
                 }
+            }
+            else if (ts.isGetAccessor(member)) {
+                const methodName = member.name.getText();
+                methods.set(methodName, {
+                    name: methodName,
+                    signatures: [{
+                        returnType: this.resolveReturnType(member),
+                        loc: this.getLOC(member, sourceFile),
+                        jsDoc: this.getJSDocData(member)
+                    }],
+                    isPrivate, isProtected, isStatic, isAbstract,
+                    loc: this.getLOC(member, sourceFile),
+                    jsDoc: this.getJSDocData(member),
+                    isGetter: true
+                });
+            } 
+            else if (ts.isSetAccessor(member)) {
+                const methodName = member.name.getText();
+                methods.set(methodName, {
+                    name: methodName,
+                    signatures: [{
+                        returnType: this.resolveReturnType(member),
+                        parameters: member.parameters.map(p => this.resolveParameter(p)),
+                        loc: this.getLOC(member, sourceFile),
+                        jsDoc: this.getJSDocData(member)
+                    }],
+                    isPrivate, isProtected, isStatic, isAbstract,
+                    loc: this.getLOC(member, sourceFile),
+                    jsDoc: this.getJSDocData(member),
+                    isSetter: true
+                });
             }
             else if (ts.isConstructorDeclaration(member)) {
                 res.constructor = {
@@ -318,7 +349,7 @@ export class TypescriptExtractor {
                         external: thing.external,
                         kind: TypeReferenceKinds.ENUM_MEMBER
                     }
-                }
+                };
             }
         }
         const symbolRef = this.references.resolveSymbol(symbol, this, moduleName);
@@ -329,12 +360,19 @@ export class TypescriptExtractor {
     resolveType(type: ts.Node) : Type {
         if (ts.isTypeReferenceNode(type)) {
             const symbol = this.checker.getSymbolAtLocation(type.typeName);
-            const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg));
-            if (!symbol) return {
-                type: { name: type.getText(), kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN },
-                typeParameters,
-                kind: TypeKinds.REFERENCE
-            };
+            const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg)); 
+            if (!symbol) {
+                if (ts.isIdentifier(type.typeName) && this.references.isDefault(type.typeName)) return {
+                    type: { name: type.typeName.text, kind: TypeReferenceKinds.DEFAULT_API },
+                    typeParameters,
+                    kind: TypeKinds.REFERENCE
+                };
+                return {
+                    type: { name: type.getText(), kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN },
+                    typeParameters,
+                    kind: TypeKinds.REFERENCE
+                };
+            }
             if (symbol.name === "unknown" && ts.isQualifiedName(type.typeName)) return this.resolveSymbol(type.typeName.right.text, typeParameters, type.typeName.left.getText());
             return this.resolveSymbol(symbol, typeParameters);
         }
@@ -417,9 +455,16 @@ export class TypescriptExtractor {
     }
 
     resolveExpressionToType(exp: ts.Node) : Type|undefined {
-        if (ts.isNewExpression(exp) && ts.isIdentifier(exp.expression)) return this.resolveSymbol(exp.expression.text);
-        else if (ts.isLiteralExpression(exp)) return { name: exp.text, kind: TypeKinds.STRINGIFIED_UNKNOWN };
-        return;
+        if (ts.isNewExpression(exp) && ts.isIdentifier(exp.expression)) return this.resolveSymbol(exp.expression.text, exp.typeArguments?.map(arg => this.resolveType(arg)));
+        switch (exp.kind) {
+        case ts.SyntaxKind.NumericLiteral: return { name: "number", kind: TypeKinds.NUMBER };
+        case ts.SyntaxKind.FalseKeyword:
+        case ts.SyntaxKind.TrueKeyword: return { name: "boolean", kind: TypeKinds.BOOLEAN };
+        case ts.SyntaxKind.StringLiteral: return { name: "string", kind: TypeKinds.STRING };
+        case ts.SyntaxKind.NullKeyword: return { name: "null", kind: TypeKinds.NULL };
+        case ts.SyntaxKind.UndefinedKeyword: return { name: "undefined", kind: TypeKinds.UNDEFINED};
+        default: return { name: exp.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
+        }
     }
 
     resolveGenerics(generic: ts.TypeParameterDeclaration) : TypeParameter {
@@ -431,8 +476,9 @@ export class TypescriptExtractor {
     }
 
     resolveParameter(param: ts.ParameterDeclaration) : FunctionParameter {
+        const name = ts.isIdentifier(param.name) ? param.name.text:"__namedParameters";
         return {
-            name: param.name.getText(),
+            name,
             isOptional: Boolean(param.questionToken),
             rest: Boolean(param.dotDotDotToken),
             type: param.type && this.resolveType(param.type),
@@ -453,7 +499,7 @@ export class TypescriptExtractor {
         };
     }
 
-    resolveReturnType(fn: ts.MethodDeclaration|ts.FunctionDeclaration) : Type|undefined {
+    resolveReturnType(fn: ts.MethodDeclaration|ts.FunctionDeclaration|ts.GetAccessorDeclaration|ts.SetAccessorDeclaration) : Type|undefined {
         if (fn.type) return this.resolveType(fn.type);
         const sig = this.checker.getSignatureFromDeclaration(fn);
         if (!sig) return;
