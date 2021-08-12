@@ -51,7 +51,7 @@ export type NodeWithManyLOC = {
     loc: Array<Loc>
 }
 
-export function createModule(name: string, isGlobal?: boolean, repository?: string, isNamespace?: boolean) : Module {
+export function createModule(name: string, isGlobal?: boolean, repository?: string, isNamespace?: boolean, readme?: string) : Module {
     return {
         name,
         repository,
@@ -89,6 +89,8 @@ export const enum TypeKinds {
     UNDEFINED,
     NULL,
     ANY,
+    NUMBER_LITERAL,
+    STRING_LITERAL
 }
 
 export const enum TypeReferenceKinds {
@@ -149,8 +151,7 @@ export interface ClassProperty extends ClassMember {
     type?: Type,
     isOptional?: boolean,
     isReadonly?: boolean,
-    exclamation?: boolean,
-    initializer?: Type
+    exclamation?: boolean
 }
 
 export interface FunctionParameter {
@@ -169,7 +170,9 @@ export interface FunctionSignature extends NamelessNode {
 }
 
 export interface ClassMethod extends ClassMember {
-    signatures: Array<FunctionSignature>
+    signatures: Array<FunctionSignature>,
+    isGetter?: boolean,
+    isSetter?: boolean
 }
 
 export type Constructor = Omit<ArrowFunction, "kind">
@@ -250,7 +253,7 @@ export interface ConstantDecl extends Node {
 }
 
 export interface EnumMember extends Node {
-    initializer?: string
+    initializer?: Type
 }
 
 export interface EnumDecl extends NodeWithManyLOC {

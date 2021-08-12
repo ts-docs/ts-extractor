@@ -33,6 +33,10 @@ export class ReferenceManager {
             if (val) return val;
         }
         return;
+    }
+    
+    isDefault(thing: ts.Identifier) : boolean {
+        return EXCLUDED_TYPE_REFS.includes(thing.text);
+    }
 
-    } 
 }
