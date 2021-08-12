@@ -103,7 +103,7 @@ export class TypescriptExtractor {
                 existing.loc.push(this.getLOC(node, sourceFile));
                 existing.members.push(...node.members.map(m => ({
                     name: m.name.getText(),
-                    initializer: m.initializer && m.initializer.getText(),
+                    initializer: m.initializer && this.resolveExpressionToType(m.initializer),
                     loc: this.getLOC(m),
                 })));
                 return;
@@ -113,7 +113,7 @@ export class TypescriptExtractor {
                 const: Boolean(node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ConstKeyword)),
                 members: node.members.map(m => ({
                     name: m.name.getText(),
-                    initializer: m.initializer && m.initializer.getText(),
+                    initializer: m.initializer && this.resolveExpressionToType(m.initializer),
                     loc: this.getLOC(m),
                 })),
                 loc: [this.getLOC(node, sourceFile)],
@@ -450,6 +450,9 @@ export class TypescriptExtractor {
         case ts.SyntaxKind.VoidKeyword: return { name: "void", kind: TypeKinds.VOID };
         case ts.SyntaxKind.AnyKeyword: return { name: "any", kind: TypeKinds.ANY };
         case ts.SyntaxKind.UnknownKeyword: return { name: "unknown", kind: TypeKinds.UNKNOWN };
+        case ts.SyntaxKind.BigIntLiteral:
+        case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL};
+        case ts.SyntaxKind.StringLiteral: return { name: type.getText(), kind: TypeKinds.STRING_LITERAL };
         default: return {name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
         }
     }
@@ -457,12 +460,13 @@ export class TypescriptExtractor {
     resolveExpressionToType(exp: ts.Node) : Type|undefined {
         if (ts.isNewExpression(exp) && ts.isIdentifier(exp.expression)) return this.resolveSymbol(exp.expression.text, exp.typeArguments?.map(arg => this.resolveType(arg)));
         switch (exp.kind) {
-        case ts.SyntaxKind.NumericLiteral: return { name: "number", kind: TypeKinds.NUMBER };
-        case ts.SyntaxKind.FalseKeyword:
-        case ts.SyntaxKind.TrueKeyword: return { name: "boolean", kind: TypeKinds.BOOLEAN };
-        case ts.SyntaxKind.StringLiteral: return { name: "string", kind: TypeKinds.STRING };
+        case ts.SyntaxKind.BigIntLiteral:
+        case ts.SyntaxKind.NumericLiteral: return { name: exp.getText(), kind: TypeKinds.NUMBER_LITERAL };
+        case ts.SyntaxKind.FalseKeyword: return { name: "false", kind: TypeKinds.FALSE };
+        case ts.SyntaxKind.TrueKeyword: return { name: "true", kind: TypeKinds.TRUE };
+        case ts.SyntaxKind.StringLiteral: return { name: exp.getText(), kind: TypeKinds.STRING_LITERAL };
         case ts.SyntaxKind.NullKeyword: return { name: "null", kind: TypeKinds.NULL };
-        case ts.SyntaxKind.UndefinedKeyword: return { name: "undefined", kind: TypeKinds.UNDEFINED};
+        case ts.SyntaxKind.UndefinedKeyword: return { name: "undefined", kind: TypeKinds.UNDEFINED };
         default: return { name: exp.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
         }
     }
@@ -515,7 +519,6 @@ export class TypescriptExtractor {
         }));
         
     } 
-    
 
     resolveProperty(prop: ts.TypeElement) : InterfaceProperty|IndexSignatureDeclaration {
         if (ts.isPropertySignature(prop)) return {

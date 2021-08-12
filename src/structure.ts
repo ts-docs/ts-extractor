@@ -51,7 +51,7 @@ export type NodeWithManyLOC = {
     loc: Array<Loc>
 }
 
-export function createModule(name: string, isGlobal?: boolean, repository?: string, isNamespace?: boolean) : Module {
+export function createModule(name: string, isGlobal?: boolean, repository?: string, isNamespace?: boolean, readme?: string) : Module {
     return {
         name,
         repository,
@@ -63,7 +63,8 @@ export function createModule(name: string, isGlobal?: boolean, repository?: stri
         enums: new Map(),
         constants: [],
         isGlobal,
-        isNamespace
+        isNamespace,
+        readme
     };
 }
 
@@ -89,6 +90,8 @@ export const enum TypeKinds {
     UNDEFINED,
     NULL,
     ANY,
+    NUMBER_LITERAL,
+    STRING_LITERAL
 }
 
 export const enum TypeReferenceKinds {
@@ -251,7 +254,7 @@ export interface ConstantDecl extends Node {
 }
 
 export interface EnumMember extends Node {
-    initializer?: string
+    initializer?: Type
 }
 
 export interface EnumDecl extends NodeWithManyLOC {
