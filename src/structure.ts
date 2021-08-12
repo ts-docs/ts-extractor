@@ -63,8 +63,7 @@ export function createModule(name: string, isGlobal?: boolean, repository?: stri
         enums: new Map(),
         constants: [],
         isGlobal,
-        isNamespace,
-        readme
+        isNamespace
     };
 }
 
