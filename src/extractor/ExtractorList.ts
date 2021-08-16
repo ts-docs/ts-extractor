@@ -21,6 +21,7 @@ export class ExtractorList extends Array<TypescriptExtractor> {
             checker: typeChecker,
             readme: getReadme(lastDir),
             homepage: packageJSONData.contents.homepage,
+            version: packageJSONData.contents.version,
             references
         });
         this.push(extractor);
