@@ -159,7 +159,7 @@ export interface FunctionParameter {
     type?: Type,
     rest?: boolean,
     isOptional?: boolean,
-    defaultValue?: string,
+    defaultValue?: Type,
     jsDoc: JSDocData
 }
 
