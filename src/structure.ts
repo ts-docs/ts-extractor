@@ -51,7 +51,7 @@ export type NodeWithManyLOC = {
     loc: Array<Loc>
 }
 
-export function createModule(name: string, isGlobal?: boolean, repository?: string, isNamespace?: boolean, readme?: string) : Module {
+export function createModule(name: string, isGlobal?: boolean, repository?: string, isNamespace?: boolean) : Module {
     return {
         name,
         repository,
@@ -90,7 +90,12 @@ export const enum TypeKinds {
     NULL,
     ANY,
     NUMBER_LITERAL,
-    STRING_LITERAL
+    STRING_LITERAL,
+    MAPPED_TYPE,
+    CONDITIONAL_TYPE,
+    TEMPLATE_LITERAL,
+    INDEX_ACCESS,
+    TYPEOF_OPERATOR
 }
 
 export const enum TypeReferenceKinds {
@@ -103,9 +108,6 @@ export const enum TypeReferenceKinds {
     TYPE_PARAMETER,
     UNKNOWN,
     STRINGIFIED_UNKNOWN,
-    UNIQUE_OPERATOR,
-    READONLY_OPERATOR,
-    KEYOF_OPERATOR,
     ENUM_MEMBER,
     DEFAULT_API,
 }
@@ -123,7 +125,7 @@ export interface BaseType {
     kind: TypeKinds
 }
 
-export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType;
+export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType;
 
 export interface Reference extends BaseType {
     type: ReferenceType,
@@ -214,7 +216,7 @@ export interface UnionOrIntersection  extends BaseType {
     types: Array<Type>
 }
 
-// keyof a, unqiue a, readonly a
+// keyof a, unqiue a, readonly a, typeof a
 export interface TypeOperator extends BaseType {
     type: Type
 }
@@ -259,4 +261,27 @@ export interface EnumMember extends Node {
 export interface EnumDecl extends NodeWithManyLOC {
     members: Array<EnumMember>
     const: boolean
+}
+
+export interface MappedType extends BaseType {
+    typeParameter: string,
+    optional?: boolean,
+    type?: Type
+}
+
+export interface ConditionalType extends BaseType {
+    checkType: Type,
+    extendsType: Type,
+    trueType: Type,
+    falseType: Type
+}
+
+export interface TemplateLiteralType extends BaseType {
+    head: string,
+    spans: Array<{type: Type, text: string}>
+}
+
+export interface IndexAccessedType extends BaseType {
+    object: Type,
+    index: Type
 }

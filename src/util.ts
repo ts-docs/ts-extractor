@@ -30,7 +30,7 @@ export function findTSConfigDown(basePath = process.cwd()) : ts.CompilerOptions|
     return undefined;
 }
 
-export type PackageJSON = { 
+export interface PackageJSON { 
     contents: Record<string, string>,
     path: string
 }
@@ -54,7 +54,7 @@ export function getRepository(packageJSON: PackageJSON) : string|undefined {
     } else {
         const {type, url} = repository;
         const branch = getBranchName(packageJSON.path);
-        return `${url.replace(new RegExp(`${type}\\+|\\.${type}`, "g"), "")}/tree/${branch}${repository.directory || ""}`;
+        return `${url.replace(new RegExp(`${type}\\+|\\.${type}|${type}:`, "g"), "")}/tree/${branch}${repository.directory || ""}`;
     }
 }
 

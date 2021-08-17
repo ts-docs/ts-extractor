@@ -4,7 +4,7 @@ import { TypescriptExtractor } from ".";
 import { ReferenceType, TypeReferenceKinds } from "../structure";
 import { ExtractorList } from "./ExtractorList";
 
-const EXCLUDED_TYPE_REFS = ["Promise", "Array", "Map", "IterableIterator", "Set", "Function", "Record", "Omit", "Symbol", "Error", "URL", "EventTarget", "URLSearchParams"];
+const EXCLUDED_TYPE_REFS = ["Promise", "Array", "Map", "IterableIterator", "Set", "Function", "Record", "Omit", "Symbol", "Error", "URL", "EventTarget", "URLSearchParams", "RegExp"];
 
 export class ReferenceManager {
     basePath: string
