@@ -265,6 +265,7 @@ export interface EnumDecl extends NodeWithManyLOC {
 
 export interface MappedType extends BaseType {
     typeParameter: string,
+    constraint?: Type,
     optional?: boolean,
     type?: Type
 }

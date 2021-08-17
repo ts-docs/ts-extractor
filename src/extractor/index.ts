@@ -449,6 +449,7 @@ export class TypescriptExtractor {
                 typeParameter: type.typeParameter.name.text,
                 optional: Boolean(type.questionToken),
                 type: type.type && this.resolveType(type.type),
+                constraint: type.typeParameter.constraint && this.resolveType(type.typeParameter.constraint),
                 kind: TypeKinds.MAPPED_TYPE
             };
         }
@@ -473,6 +474,14 @@ export class TypescriptExtractor {
                 object: this.resolveType(type.objectType),
                 index: this.resolveType(type.indexType),
                 kind: TypeKinds.INDEX_ACCESS
+            };
+        }
+        else if (ts.isTypeQueryNode(type)) {
+            const sym = this.checker.getSymbolAtLocation(type.exprName);
+            if (!sym) return { kind: TypeKinds.UNKNOWN };
+            return {
+                type: this.resolveSymbol(sym),
+                kind: TypeKinds.TYPEOF_OPERATOR
             };
         }
         else switch (type.kind) {
