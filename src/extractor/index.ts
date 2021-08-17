@@ -12,6 +12,7 @@ export interface TypescriptExtractorSettings {
     checker: ts.TypeChecker,
     readme?: string,
     homepage?: string,
+    version?: string,
     references: ReferenceManager
 }
 
@@ -24,6 +25,7 @@ export class TypescriptExtractor {
     repository?: string
     readme?: string
     homepage?: string
+    version?: string
     private moduleCache: Record<string, Module>
     private namespaceCache: Record<string, Module>
     constructor(settings: TypescriptExtractorSettings) {
@@ -35,6 +37,7 @@ export class TypescriptExtractor {
         this.readme = settings.readme;
         this.homepage = settings.homepage;
         this.repository = settings.repository;
+        this.version = settings.version;
         this.moduleCache = {};
         this.namespaceCache = {};
     }
@@ -459,6 +462,10 @@ export class TypescriptExtractor {
 
     resolveExpressionToType(exp: ts.Node) : Type|undefined {
         if (ts.isNewExpression(exp) && ts.isIdentifier(exp.expression)) return this.resolveSymbol(exp.expression.text, exp.typeArguments?.map(arg => this.resolveType(arg)));
+        if (ts.isPropertyAccessExpression(exp)) {
+            const leftSym = this.checker.getSymbolAtLocation(exp.expression);
+            if (leftSym && hasBit(leftSym.flags, ts.SymbolFlags.Module)) return this.resolveSymbol(leftSym, undefined, exp.name.text);
+        }
         switch (exp.kind) {
         case ts.SyntaxKind.BigIntLiteral:
         case ts.SyntaxKind.NumericLiteral: return { name: exp.getText(), kind: TypeKinds.NUMBER_LITERAL };
@@ -486,6 +493,7 @@ export class TypescriptExtractor {
             isOptional: Boolean(param.questionToken),
             rest: Boolean(param.dotDotDotToken),
             type: param.type && this.resolveType(param.type),
+            defaultValue: param.initializer && this.resolveExpressionToType(param.initializer),
             jsDoc: { comment: this.getJSDocCommentOfParam(param) }
         };
     }
