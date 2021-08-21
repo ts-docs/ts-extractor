@@ -1,5 +1,5 @@
 
-import {ArrowFunction, ConstantDecl, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, JSDocData, InterfaceDecl, ClassDecl, TypeDecl, Loc, JSDocTag, TypeReferenceKinds, Type, ClassMethod } from "../structure";
+import {ArrowFunction, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, JSDocData, InterfaceDecl, ClassDecl, TypeDecl, Loc, JSDocTag, TypeReferenceKinds, Type, ClassMethod } from "../structure";
 import ts from "typescript";
 import { getLastItemFromPath, hasBit } from "../util";
 import { ReferenceManager } from "./ReferenceManager";
@@ -143,6 +143,7 @@ export class TypescriptExtractor {
     handleTypeDeclaration(node: ts.TypeAliasDeclaration) : void {
         const decl = this.currentModule.types.get(node.name.text) as TypeDecl;
         decl.value = this.resolveType(node.type);
+        decl.typeParameters = node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p));
     }
 
     handleFunctionDeclaration(node: ts.FunctionDeclaration) : void {
@@ -169,11 +170,10 @@ export class TypescriptExtractor {
     }
 
     handleVariableDeclaration(node: ts.VariableStatement) : void {
-        const declarations: Array<ConstantDecl> = [];
         for (const declaration of node.declarationList.declarations) {
             if (!declaration.initializer) continue;
             const text = declaration.initializer && declaration.initializer.getText();
-            declarations.push({
+            this.currentModule.constants.set(declaration.name.getText(), {
                 name: declaration.name.getText(),
                 loc: this.getLOC(declaration),
                 type: declaration.type ? this.resolveType(declaration.type) : undefined,
@@ -181,7 +181,6 @@ export class TypescriptExtractor {
                 jsDoc: this.getJSDocData(node)
             });
         }
-        this.currentModule.constants.push(...declarations);
     }
 
     handleClassDeclaration(node: ts.ClassDeclaration) : void {
@@ -334,14 +333,15 @@ export class TypescriptExtractor {
     }
 
     resolveSymbol(symbol: ts.Symbol|string, typeParameters?: Type[], moduleName?: string) : Type {
+        let symbolRef;
         if (typeof symbol !== "string") {
             if (hasBit(symbol.flags, ts.SymbolFlags.TypeParameter)) return {
-                type: { name: symbol.name, kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN },
+                type: { name: symbol.name, kind: TypeReferenceKinds.TYPE_PARAMETER },
                 typeParameters,
                 kind: TypeKinds.REFERENCE
             };
             if (hasBit(symbol.flags, ts.SymbolFlags.EnumMember) && symbol.valueDeclaration && ts.isEnumDeclaration(symbol.valueDeclaration.parent)) {
-                const thing = this.references.resolveSymbol(symbol.valueDeclaration.parent.name.text, this);
+                const thing = this.references.resolveString(symbol.valueDeclaration.parent.name.text, this);
                 if (!thing) return { kind: TypeKinds.UNKNOWN };
                 return {
                     kind: TypeKinds.REFERENCE,
@@ -354,8 +354,13 @@ export class TypescriptExtractor {
                     }
                 };
             }
-        }
-        const symbolRef = this.references.resolveSymbol(symbol, this, moduleName);
+            if (symbol.declarations && symbol.declarations.length && ts.isImportSpecifier(symbol.declarations[0]) && symbol.declarations[0].propertyName) {
+                const sym = this.checker.getSymbolAtLocation(symbol.declarations[0].propertyName);
+                if (sym) symbolRef = this.references.resolveSymbol(sym, this);
+                else symbolRef = this.references.resolveString(symbol.declarations[0].propertyName.text, this);
+            }
+            else symbolRef = this.references.resolveSymbol(symbol, this, moduleName);
+        } else symbolRef = this.references.resolveString(symbol, this, moduleName);
         if (symbolRef) return { type: symbolRef, typeParameters, kind: TypeKinds.REFERENCE };
         return { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeKinds.UNKNOWN };
     }
@@ -456,6 +461,7 @@ export class TypescriptExtractor {
         case ts.SyntaxKind.BigIntLiteral:
         case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL};
         case ts.SyntaxKind.StringLiteral: return { name: type.getText(), kind: TypeKinds.STRING_LITERAL };
+        case ts.SyntaxKind.SymbolKeyword: return { name: type.getText(), kind: TypeKinds.SYMBOL }
         default: return {name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
         }
     }
@@ -574,20 +580,6 @@ export class TypescriptExtractor {
         }
         return res;
     }
-    
-    moduleToJSON(module = this.module) : Record<string, unknown> {
-        const clone: Record<string, unknown> = {...module};
-        clone.modules = [];
-        clone.classes = [...module.classes.values()];
-        clone.interfaces = [...module.interfaces.values()];
-        clone.types = [...module.types.values()];
-        clone.enums = [...module.enums.values()];
-        clone.functions = [...module.functions.values()];
-        for (const [, mod] of module.modules) {
-            (clone.modules as Array<Record<string, unknown>>).push(this.moduleToJSON(mod));
-        }
-        return clone;
-    }
 
     getLOC(node: ts.Node, sourceFile = node.getSourceFile(), includeLine = true) : Loc {
         const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
@@ -596,6 +588,21 @@ export class TypescriptExtractor {
             pos,
             sourceFile: this.currentModule.repository && `${this.currentModule.repository}/${getLastItemFromPath(sourceFile.fileName)}${includeLine ? `#L${pos.line + 1}`:""}`
         };
+    }
+
+    moduleToJSON(module = this.module) : Record<string, unknown> {
+        const clone: Record<string, unknown> = {...module};
+        clone.modules = [];
+        clone.classes = [...module.classes.values()];
+        clone.interfaces = [...module.interfaces.values()];
+        clone.types = [...module.types.values()];
+        clone.enums = [...module.enums.values()];
+        clone.functions = [...module.functions.values()];
+        clone.constants = [...module.constants.values()];
+        for (const [, mod] of module.modules) {
+            (clone.modules as Array<Record<string, unknown>>).push(this.moduleToJSON(mod));
+        }
+        return clone;
     }
 
     toJSON() : Record<string, unknown> {

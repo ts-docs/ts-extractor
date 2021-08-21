@@ -8,7 +8,7 @@ export interface Module {
     interfaces: Map<string, InterfaceDecl>,
     types: Map<string, TypeDecl>,
     enums: Map<string, EnumDecl>,
-    constants: Array<ConstantDecl>,
+    constants: Map<string, ConstantDecl>,
     repository?: string,
     isGlobal?: boolean,
     isNamespace?: boolean
@@ -61,7 +61,7 @@ export function createModule(name: string, isGlobal?: boolean, repository?: stri
         interfaces: new Map(),
         types: new Map(),
         enums: new Map(),
-        constants: [],
+        constants: new Map(),
         isGlobal,
         isNamespace
     };
@@ -90,7 +90,8 @@ export const enum TypeKinds {
     NULL,
     ANY,
     NUMBER_LITERAL,
-    STRING_LITERAL
+    STRING_LITERAL,
+    SYMBOL
 }
 
 export const enum TypeReferenceKinds {
@@ -244,7 +245,8 @@ export interface InterfaceDecl extends NodeWithManyLOC {
 }
 
 export interface TypeDecl extends Node {
-    value?: Type
+    value?: Type,
+    typeParameters?: Array<TypeParameter>
 }
 
 export interface ConstantDecl extends Node {
