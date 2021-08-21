@@ -30,7 +30,7 @@ export function findTSConfigDown(basePath = process.cwd()) : ts.CompilerOptions|
     return undefined;
 }
 
-export type PackageJSON = { 
+export interface PackageJSON { 
     contents: Record<string, string>,
     path: string
 }

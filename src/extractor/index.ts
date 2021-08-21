@@ -442,8 +442,48 @@ export class TypescriptExtractor {
         else if (ts.isParenthesizedTypeNode(type)) return this.resolveType(type.type);
         else if (ts.isThisTypeNode(type)) {
             const symbol = this.checker.getSymbolAtLocation(type);
-            if (!symbol) return { name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
+            if (!symbol) return { name: "this", kind: TypeKinds.STRINGIFIED_UNKNOWN };
             return this.resolveSymbol(symbol);
+        }
+        else if (ts.isMappedTypeNode(type)) {
+            return {
+                typeParameter: type.typeParameter.name.text,
+                optional: Boolean(type.questionToken),
+                type: type.type && this.resolveType(type.type),
+                constraint: type.typeParameter.constraint && this.resolveType(type.typeParameter.constraint),
+                kind: TypeKinds.MAPPED_TYPE
+            };
+        }
+        else if (ts.isConditionalTypeNode(type)) {
+            return {
+                checkType: this.resolveType(type.checkType),
+                extendsType: this.resolveType(type.extendsType),
+                trueType: this.resolveType(type.trueType),
+                falseType: this.resolveType(type.falseType),
+                kind: TypeKinds.CONDITIONAL_TYPE
+            };
+        }
+        else if (ts.isTemplateLiteralTypeNode(type)) {
+            return {
+                head: type.head.text,
+                spans: type.templateSpans.map(sp => ({type: this.resolveType(sp.type), text: sp.literal.text})),
+                kind: TypeKinds.TEMPLATE_LITERAL
+            };
+        }
+        else if (ts.isIndexedAccessTypeNode(type)) {
+            return {
+                object: this.resolveType(type.objectType),
+                index: this.resolveType(type.indexType),
+                kind: TypeKinds.INDEX_ACCESS
+            };
+        }
+        else if (ts.isTypeQueryNode(type)) {
+            const sym = this.checker.getSymbolAtLocation(type.exprName);
+            if (!sym) return { kind: TypeKinds.UNKNOWN };
+            return {
+                type: this.resolveSymbol(sym),
+                kind: TypeKinds.TYPEOF_OPERATOR
+            };
         }
         else switch (type.kind) {
         //@ts-expect-error This shouldn't be erroring!
