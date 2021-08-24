@@ -12,7 +12,8 @@
   },
   "scripts": {
     "run": "tsc && node .",
-    "test": "tsc && node test/dist/index.js"
+    "test": "tsc && node test/dist/index.js",
+    "prepublishOnly": "tsc"
   },
   "repository": {
     "type": "git",
