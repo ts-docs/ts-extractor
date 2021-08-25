@@ -362,7 +362,7 @@ export class TypescriptExtractor {
             else symbolRef = this.references.resolveSymbol(symbol, this, moduleName);
         } else symbolRef = this.references.resolveString(symbol, this, moduleName);
         if (symbolRef) return { type: symbolRef, typeParameters, kind: TypeKinds.REFERENCE };
-        return { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeKinds.UNKNOWN, typeParameters };
+        return { type: { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeReferenceKinds.UNKNOWN }, kind: TypeKinds.REFERENCE, typeParameters };
     }
 
     resolveType(type: ts.Node) : Type {
@@ -444,6 +444,12 @@ export class TypescriptExtractor {
             return {
                 type: this.resolveType(type.elementType),
                 kind: TypeKinds.ARRAY_TYPE
+            };
+        }
+        else if (ts.isInferTypeNode(type)) {
+            return {
+                kind: TypeKinds.INFER_TYPE,
+                typeParameter: this.resolveGenerics(type.typeParameter)
             };
         }
         else if (ts.isParenthesizedTypeNode(type)) return this.resolveType(type.type);

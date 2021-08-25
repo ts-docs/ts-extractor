@@ -101,7 +101,8 @@ export const enum TypeKinds {
     TYPE_PREDICATE,
     THIS,
     NEVER,
-    OBJECT
+    OBJECT,
+    INFER_TYPE
 }
 
 export const enum TypeReferenceKinds {
@@ -136,7 +137,7 @@ export interface Reference extends BaseType {
     typeParameters?: Array<Type>
 }
 
-export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType | TypePredicateType;
+export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType | TypePredicateType | InferType;
 
 export interface Literal extends BaseType {
     name: string
@@ -300,4 +301,8 @@ export interface IndexAccessedType extends BaseType {
 export interface TypePredicateType extends BaseType {
     parameter: Type|string, 
     type: Type
+}
+
+export interface InferType extends BaseType {
+    typeParameter: TypeParameter
 }
