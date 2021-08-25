@@ -96,7 +96,12 @@ export const enum TypeKinds {
     TEMPLATE_LITERAL,
     INDEX_ACCESS,
     TYPEOF_OPERATOR,
-    SYMBOL
+    SYMBOL,
+    BIGINT,
+    TYPE_PREDICATE,
+    THIS,
+    NEVER,
+    OBJECT
 }
 
 export const enum TypeReferenceKinds {
@@ -126,12 +131,12 @@ export interface BaseType {
     kind: TypeKinds
 }
 
-export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType;
-
 export interface Reference extends BaseType {
     type: ReferenceType,
     typeParameters?: Array<Type>
 }
+
+export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType | TypePredicateType;
 
 export interface Literal extends BaseType {
     name: string
@@ -240,7 +245,7 @@ export interface InterfaceProperty {
 }
 
 export interface InterfaceDecl extends NodeWithManyLOC {
-    properties: Array<InterfaceProperty|IndexSignatureDeclaration>,
+    properties: Array<InterfaceProperty|IndexSignatureDeclaration|ArrowFunction>,
     typeParameters?: Array<TypeParameter>
     extends?: Type,
     implements?: Array<Type>
@@ -287,4 +292,12 @@ export interface TemplateLiteralType extends BaseType {
 export interface IndexAccessedType extends BaseType {
     object: Type,
     index: Type
+}
+
+/**
+ * Parameter can either be [[TypeKinds.THIS]] or a parameter name.
+ */
+export interface TypePredicateType extends BaseType {
+    parameter: Type|string, 
+    type: Type
 }

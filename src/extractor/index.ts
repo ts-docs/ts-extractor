@@ -362,13 +362,13 @@ export class TypescriptExtractor {
             else symbolRef = this.references.resolveSymbol(symbol, this, moduleName);
         } else symbolRef = this.references.resolveString(symbol, this, moduleName);
         if (symbolRef) return { type: symbolRef, typeParameters, kind: TypeKinds.REFERENCE };
-        return { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeKinds.UNKNOWN };
+        return { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeKinds.UNKNOWN, typeParameters };
     }
 
     resolveType(type: ts.Node) : Type {
         if (ts.isTypeReferenceNode(type)) {
             const symbol = this.checker.getSymbolAtLocation(type.typeName);
-            const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg)); 
+            const typeParameters = type.typeArguments?.map(arg => this.resolveType(arg)); 
             if (!symbol) {
                 if (ts.isIdentifier(type.typeName) && this.references.isDefault(type.typeName)) return {
                     type: { name: type.typeName.text, kind: TypeReferenceKinds.DEFAULT_API },
@@ -414,6 +414,13 @@ export class TypescriptExtractor {
             return {
                 types: type.elements.map(el => this.resolveType(el)),
                 kind: TypeKinds.TUPLE
+            };
+        }
+        else if (ts.isTypePredicateNode(type)) {
+            if (ts.isThisTypeNode(type.parameterName)) return { kind: TypeKinds.TYPE_PREDICATE, parameter: { kind: TypeKinds.THIS }, type: type.type && this.resolveType(type.type) };
+            else return {
+                kind: TypeKinds.TYPE_PREDICATE,
+                parameter: type.parameterName.text
             };
         }
         else if (ts.isTypeOperatorNode(type)) {
@@ -501,7 +508,10 @@ export class TypescriptExtractor {
         case ts.SyntaxKind.BigIntLiteral:
         case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL};
         case ts.SyntaxKind.StringLiteral: return { name: type.getText(), kind: TypeKinds.STRING_LITERAL };
-        case ts.SyntaxKind.SymbolKeyword: return { name: type.getText(), kind: TypeKinds.SYMBOL }
+        case ts.SyntaxKind.SymbolKeyword: return { name: "symbol", kind: TypeKinds.SYMBOL };
+        case ts.SyntaxKind.BigIntKeyword: return { name: "bigint", kind: TypeKinds.BIGINT };
+        case ts.SyntaxKind.NeverKeyword: return { name: "never", kind: TypeKinds.NEVER };
+        case ts.SyntaxKind.ObjectKeyword: return { name: "object", kind: TypeKinds.OBJECT };
         default: return {name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
         }
     }
@@ -511,6 +521,20 @@ export class TypescriptExtractor {
         if (ts.isPropertyAccessExpression(exp)) {
             const leftSym = this.checker.getSymbolAtLocation(exp.expression);
             if (leftSym && hasBit(leftSym.flags, ts.SymbolFlags.Module)) return this.resolveSymbol(leftSym, undefined, exp.name.text);
+            if (leftSym && hasBit(leftSym.flags, ts.SymbolFlags.Enum)) {
+                const thing = this.references.resolveSymbol(leftSym, this);
+                if (!thing) return { kind: TypeKinds.UNKNOWN };
+                return {
+                    kind: TypeKinds.REFERENCE,
+                    type: {
+                        displayName: exp.name.text,
+                        name: thing.name,
+                        path: thing.path,
+                        external: thing.external,
+                        kind: TypeReferenceKinds.ENUM_MEMBER
+                    }
+                };
+            }
         }
         switch (exp.kind) {
         case ts.SyntaxKind.BigIntLiteral:
@@ -574,12 +598,18 @@ export class TypescriptExtractor {
         
     } 
 
-    resolveProperty(prop: ts.TypeElement) : InterfaceProperty|IndexSignatureDeclaration {
+    resolveProperty(prop: ts.TypeElement) : InterfaceProperty|IndexSignatureDeclaration|ArrowFunction {
         if (ts.isPropertySignature(prop)) return {
             name: prop.name.getText(),
             type: prop.type && this.resolveType(prop.type),
             isOptional: Boolean(prop.questionToken),
             isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword),
+        };
+        else if (ts.isMethodSignature(prop)) return {
+            name: prop.name.getText(),
+            parameters: prop.parameters.map(p => this.resolveParameter(p)),
+            returnType: prop.type && this.resolveType(prop.type),
+            kind: TypeKinds.ARROW_FUNCTION
         };
         else {
             const param = (prop as ts.IndexSignatureDeclaration).parameters[0];

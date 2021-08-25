@@ -5,7 +5,7 @@ import { ReferenceType, TypeReferenceKinds } from "../structure";
 import { hasBit } from "../util";
 import { ExtractorList } from "./ExtractorList";
 
-const EXCLUDED_TYPE_REFS = ["Promise", "Array", "Map", "IterableIterator", "Set", "Function", "Record", "Omit", "Symbol", "Error", "URL", "EventTarget", "URLSearchParams", "Buffer", "Event", "EventTarget", "WebAssembly", "Date", "RegExp"];
+const EXCLUDED_TYPE_REFS = ["Promise", "ReadonlyArray", "Array", "Map", "IterableIterator", "Set", "Function", "Record", "Omit", "Pick", "Symbol", "Error", "URL", "EventTarget", "URLSearchParams", "Buffer", "Event", "EventTarget", "WebAssembly", "Date", "RegExp"];
 
 export class ReferenceManager {
     basePath: string
@@ -18,7 +18,6 @@ export class ReferenceManager {
     resolveSymbol(symbol: ts.Symbol, currentExt: TypescriptExtractor, moduleName?: string) : ReferenceType|undefined {
         const name = symbol.name;
         if (EXCLUDED_TYPE_REFS.includes(name)) return { kind: TypeReferenceKinds.DEFAULT_API, name };
-
         if (hasBit(symbol.flags, ts.SymbolFlags.Class)) return currentExt.forEachModule<ReferenceType>(currentExt.module, (mod, path) => {
             if ((moduleName && mod.name !== moduleName) || !mod.classes.has(name)) return;
             return { name, path, kind: TypeReferenceKinds.CLASS };
@@ -82,7 +81,6 @@ export class ReferenceManager {
         }
         return;
     }
-
     
     isDefault(thing: ts.Identifier) : boolean {
         return EXCLUDED_TYPE_REFS.includes(thing.text);
