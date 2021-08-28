@@ -14,7 +14,7 @@ export class ExtractorList extends Array<TypescriptExtractor> {
         const lastItem = getLastItemFromPath(lastDir);
         const repo = getRepository(packageJSONData);
         let name = packageJSONData.contents.name;
-        if (name.includes("/")) name = name.replace(/\//g, "-");
+        if (name.includes("/")) name = name.split("/")[1];
         const module = createModule(name, true, repo && `${repo}/${lastItem}`, undefined);
         const extractor: TypescriptExtractor = new TypescriptExtractor({
             module,
