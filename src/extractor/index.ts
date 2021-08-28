@@ -501,7 +501,7 @@ export class TypescriptExtractor {
         case ts.SyntaxKind.BigIntLiteral:
         case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL};
         case ts.SyntaxKind.StringLiteral: return { name: type.getText(), kind: TypeKinds.STRING_LITERAL };
-        case ts.SyntaxKind.SymbolKeyword: return { name: type.getText(), kind: TypeKinds.SYMBOL }
+        case ts.SyntaxKind.SymbolKeyword: return { name: type.getText(), kind: TypeKinds.SYMBOL };
         default: return {name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
         }
     }
