@@ -1,5 +1,5 @@
 
-import {ArrowFunction, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeParameter, InterfaceProperty, IndexSignatureDeclaration, JSDocData, InterfaceDecl, ClassDecl, TypeDecl, Loc, JSDocTag, TypeReferenceKinds, Type, ClassMethod } from "../structure";
+import {ArrowFunction, createModule, FunctionParameter, Module, ObjectLiteral, Reference, TypeKinds, TypeParameter, IndexSignatureDeclaration, JSDocData, InterfaceDecl, ClassDecl, TypeDecl, Loc, JSDocTag, TypeReferenceKinds, Type, ClassMethod, Property } from "../structure";
 import ts from "typescript";
 import { getLastItemFromPath, hasBit } from "../util";
 import { ReferenceManager } from "./ReferenceManager";
@@ -81,7 +81,6 @@ export class TypescriptExtractor {
                 properties: [],
                 methods: [],
                 loc: this.getLOC(node, sourceFile),
-                constructor: undefined,
                 isAbstract: node.modifiers && node.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
                 jsDoc: this.getJSDocData(node),
                 isExported: node.modifiers && node.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword)
@@ -188,6 +187,7 @@ export class TypescriptExtractor {
         res.typeParameters = node.typeParameters && node.typeParameters.map(p => this.resolveGenerics(p));
         const sourceFile = node.getSourceFile();
         const methods = new Map<string, ClassMethod>();
+        let constructor;
         for (const member of node.members) {
             let isStatic, isPrivate, isProtected, isReadonly, isAbstract;
             if (member.modifiers) {
@@ -206,20 +206,21 @@ export class TypescriptExtractor {
                     loc: this.getLOC(member, sourceFile),
                     isOptional: Boolean(member.questionToken),
                     isPrivate, isProtected, isStatic, isReadonly, isAbstract, 
-                    jsDoc: this.getJSDocData(member)
+                    jsDoc: this.getJSDocData(member),
+                    initializer: member.initializer && this.resolveExpressionToType(member.initializer)
                 });
             }
             else if (ts.isMethodDeclaration(member)) {
                 const methodName = member.name.getText();
-                if (methods.has(methodName)) {
-                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    methods.get(methodName)!.signatures.push({
+                const method = methods.get(methodName);
+                if (method) {
+                    method.signatures.push({
                         returnType: this.resolveReturnType(member),
                         typeParameters: member.typeParameters && member.typeParameters.map(p => this.resolveGenerics(p)),
                         parameters: member.parameters.map(p => this.resolveParameter(p)),
-                        loc: this.getLOC(member, sourceFile),
                         jsDoc: this.getJSDocData(member)
                     });
+                    if (member.body) method.loc = this.getLOC(member);
                 } else {
                     methods.set(methodName, {
                         name: methodName,
@@ -230,7 +231,6 @@ export class TypescriptExtractor {
                             returnType: this.resolveReturnType(member),
                             typeParameters: member.typeParameters && member.typeParameters.map(p => this.resolveGenerics(p)),
                             parameters: member.parameters.map(p => this.resolveParameter(p)),
-                            loc: this.getLOC(member, sourceFile),
                             jsDoc: this.getJSDocData(member)
                         }]                        
                     });
@@ -242,7 +242,6 @@ export class TypescriptExtractor {
                     name: methodName,
                     signatures: [{
                         returnType: this.resolveReturnType(member),
-                        loc: this.getLOC(member, sourceFile),
                         jsDoc: this.getJSDocData(member)
                     }],
                     isPrivate, isProtected, isStatic, isAbstract,
@@ -258,7 +257,6 @@ export class TypescriptExtractor {
                     signatures: [{
                         returnType: this.resolveReturnType(member),
                         parameters: member.parameters.map(p => this.resolveParameter(p)),
-                        loc: this.getLOC(member, sourceFile),
                         jsDoc: this.getJSDocData(member)
                     }],
                     isPrivate, isProtected, isStatic, isAbstract,
@@ -268,12 +266,21 @@ export class TypescriptExtractor {
                 });
             }
             else if (ts.isConstructorDeclaration(member)) {
-                res.constructor = {
-                    parameters: member.parameters.map(p => this.resolveParameter(p))
-                };
+                if (!constructor) {
+                    constructor = {
+                        loc: this.getLOC(member),
+                        signatures: [{
+                            parameters: member.parameters.map(p => this.resolveParameter(p))
+                        }],
+                    };
+                } else {
+                    constructor.signatures.push({parameters: member.parameters.map(p => this.resolveParameter(p))});
+                    if (member.body) constructor.loc = this.getLOC(member);
+                }
             }
         }
         res.methods.push(...methods.values());
+        res._constructor = constructor;
         if (node.heritageClauses) {
             const extendsClause = node.heritageClauses.find(clause => clause.token === ts.SyntaxKind.ExtendsKeyword);
             res.extends = extendsClause && this.resolveHeritage(extendsClause.types[0]) as Reference;
@@ -288,7 +295,7 @@ export class TypescriptExtractor {
         res.properties.push(...node.members.map(m => this.resolveProperty(m as ts.PropertySignature)));
         if (node.heritageClauses) {
             const extendsClause = node.heritageClauses.find(c => c.token === ts.SyntaxKind.ExtendsKeyword);
-            res.extends = extendsClause && this.resolveHeritage(extendsClause.types[0]);
+            res.extends = extendsClause && extendsClause.types.map(t => this.resolveHeritage(t));
             const implementsClause = node.heritageClauses.find(c => c.token === ts.SyntaxKind.ImplementsKeyword);
             res.implements = implementsClause && implementsClause.types.map(impl => this.resolveType(impl));
         }
@@ -362,13 +369,13 @@ export class TypescriptExtractor {
             else symbolRef = this.references.resolveSymbol(symbol, this, moduleName);
         } else symbolRef = this.references.resolveString(symbol, this, moduleName);
         if (symbolRef) return { type: symbolRef, typeParameters, kind: TypeKinds.REFERENCE };
-        return { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeKinds.UNKNOWN };
+        return { type: { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeReferenceKinds.UNKNOWN }, kind: TypeKinds.REFERENCE, typeParameters };
     }
 
     resolveType(type: ts.Node) : Type {
         if (ts.isTypeReferenceNode(type)) {
             const symbol = this.checker.getSymbolAtLocation(type.typeName);
-            const typeParameters = type.typeArguments && type.typeArguments.map(arg => this.resolveType(arg)); 
+            const typeParameters = type.typeArguments?.map(arg => this.resolveType(arg)); 
             if (!symbol) {
                 if (ts.isIdentifier(type.typeName) && this.references.isDefault(type.typeName)) return {
                     type: { name: type.typeName.text, kind: TypeReferenceKinds.DEFAULT_API },
@@ -416,6 +423,13 @@ export class TypescriptExtractor {
                 kind: TypeKinds.TUPLE
             };
         }
+        else if (ts.isTypePredicateNode(type)) {
+            if (ts.isThisTypeNode(type.parameterName)) return { kind: TypeKinds.TYPE_PREDICATE, parameter: { kind: TypeKinds.THIS }, type: type.type && this.resolveType(type.type) };
+            else return {
+                kind: TypeKinds.TYPE_PREDICATE,
+                parameter: type.parameterName.text
+            };
+        }
         else if (ts.isTypeOperatorNode(type)) {
             let kind;
             switch (type.operator) {
@@ -437,6 +451,12 @@ export class TypescriptExtractor {
             return {
                 type: this.resolveType(type.elementType),
                 kind: TypeKinds.ARRAY_TYPE
+            };
+        }
+        else if (ts.isInferTypeNode(type)) {
+            return {
+                kind: TypeKinds.INFER_TYPE,
+                typeParameter: this.resolveGenerics(type.typeParameter)
             };
         }
         else if (ts.isParenthesizedTypeNode(type)) return this.resolveType(type.type);
@@ -501,7 +521,10 @@ export class TypescriptExtractor {
         case ts.SyntaxKind.BigIntLiteral:
         case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL};
         case ts.SyntaxKind.StringLiteral: return { name: type.getText(), kind: TypeKinds.STRING_LITERAL };
-        case ts.SyntaxKind.SymbolKeyword: return { name: type.getText(), kind: TypeKinds.SYMBOL };
+        case ts.SyntaxKind.SymbolKeyword: return { name: "symbol", kind: TypeKinds.SYMBOL };
+        case ts.SyntaxKind.BigIntKeyword: return { name: "bigint", kind: TypeKinds.BIGINT };
+        case ts.SyntaxKind.NeverKeyword: return { name: "never", kind: TypeKinds.NEVER };
+        case ts.SyntaxKind.ObjectKeyword: return { name: "object", kind: TypeKinds.OBJECT };
         default: return {name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
         }
     }
@@ -511,6 +534,20 @@ export class TypescriptExtractor {
         if (ts.isPropertyAccessExpression(exp)) {
             const leftSym = this.checker.getSymbolAtLocation(exp.expression);
             if (leftSym && hasBit(leftSym.flags, ts.SymbolFlags.Module)) return this.resolveSymbol(leftSym, undefined, exp.name.text);
+            if (leftSym && hasBit(leftSym.flags, ts.SymbolFlags.Enum)) {
+                const thing = this.references.resolveSymbol(leftSym, this);
+                if (!thing) return { kind: TypeKinds.UNKNOWN };
+                return {
+                    kind: TypeKinds.REFERENCE,
+                    type: {
+                        displayName: exp.name.text,
+                        name: thing.name,
+                        path: thing.path,
+                        external: thing.external,
+                        kind: TypeReferenceKinds.ENUM_MEMBER
+                    }
+                };
+            }
         }
         switch (exp.kind) {
         case ts.SyntaxKind.BigIntLiteral:
@@ -574,12 +611,18 @@ export class TypescriptExtractor {
         
     } 
 
-    resolveProperty(prop: ts.TypeElement) : InterfaceProperty|IndexSignatureDeclaration {
+    resolveProperty(prop: ts.TypeElement) : Property|IndexSignatureDeclaration|ArrowFunction {
         if (ts.isPropertySignature(prop)) return {
             name: prop.name.getText(),
             type: prop.type && this.resolveType(prop.type),
             isOptional: Boolean(prop.questionToken),
-            isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword),
+            isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword)
+        };
+        else if (ts.isMethodSignature(prop)) return {
+            name: prop.name.getText(),
+            parameters: prop.parameters.map(p => this.resolveParameter(p)),
+            returnType: prop.type && this.resolveType(prop.type),
+            kind: TypeKinds.ARROW_FUNCTION
         };
         else {
             const param = (prop as ts.IndexSignatureDeclaration).parameters[0];

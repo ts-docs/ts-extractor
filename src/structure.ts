@@ -38,11 +38,8 @@ export interface Node {
     isExported?: boolean
 }
 
-export interface NamelessNode {
-    loc: Loc
-    jsDoc?: Array<JSDocData>,
-    isExported?: boolean
-}
+export type NamelessNode = Omit<Node, "name">;
+export type LoclessNode = Omit<Node, "loc" | "name">
 
 export type NodeWithManyLOC = {
     name: string,
@@ -50,6 +47,7 @@ export type NodeWithManyLOC = {
     isExported?: boolean
     loc: Array<Loc>
 }
+
 
 export function createModule(name: string, isGlobal?: boolean, repository?: string, isNamespace?: boolean) : Module {
     return {
@@ -96,7 +94,13 @@ export const enum TypeKinds {
     TEMPLATE_LITERAL,
     INDEX_ACCESS,
     TYPEOF_OPERATOR,
-    SYMBOL
+    SYMBOL,
+    BIGINT,
+    TYPE_PREDICATE,
+    THIS,
+    NEVER,
+    OBJECT,
+    INFER_TYPE
 }
 
 export const enum TypeReferenceKinds {
@@ -111,6 +115,7 @@ export const enum TypeReferenceKinds {
     STRINGIFIED_UNKNOWN,
     ENUM_MEMBER,
     DEFAULT_API,
+    NAMESPACE_OR_MODULE
 }
 
 
@@ -126,12 +131,12 @@ export interface BaseType {
     kind: TypeKinds
 }
 
-export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType;
-
 export interface Reference extends BaseType {
     type: ReferenceType,
     typeParameters?: Array<Type>
 }
+
+export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType | TypePredicateType | InferType;
 
 export interface Literal extends BaseType {
     name: string
@@ -150,11 +155,17 @@ export interface ClassMember extends Node {
     isAbstract?: boolean
 }
 
-export interface ClassProperty extends ClassMember {
+export interface Property {
+    name: string,
     type?: Type,
-    isOptional?: boolean,
     isReadonly?: boolean,
-    exclamation?: boolean
+    isOptional: boolean,
+    initializer?: Type
+}
+
+export interface ClassProperty extends ClassMember, Property {
+    type?: Type,
+    exclamation?: boolean,
 }
 
 export interface FunctionParameter {
@@ -166,7 +177,7 @@ export interface FunctionParameter {
     jsDoc: JSDocData
 }
 
-export interface FunctionSignature extends NamelessNode {
+export interface FunctionSignature extends LoclessNode {
     parameters?: Array<FunctionParameter>,
     typeParameters?: Array<TypeParameter>,
     returnType?: Type
@@ -178,15 +189,12 @@ export interface ClassMethod extends ClassMember {
     isSetter?: boolean
 }
 
-export type Constructor = Omit<ArrowFunction, "kind">
-
-
 export interface ClassDecl extends Node {
     typeParameters?: Array<TypeParameter>,
     properties: Array<ClassProperty>,
     methods: Array<ClassMethod>,
     extends?: Reference,
-    constructor?: Constructor,
+    _constructor?: Omit<FunctionDecl, "name">,
     implements?: Array<Type>,
     isAbstract?: boolean
 }
@@ -209,7 +217,7 @@ export interface IndexSignatureDeclaration {
 
 // { a: type }
 export interface ObjectLiteral extends BaseType {
-    properties: Array<InterfaceProperty|IndexSignatureDeclaration>,
+    properties: Array<Property|IndexSignatureDeclaration>,
 }
 
 // a | b , a & b
@@ -232,17 +240,10 @@ export interface ArrayType extends BaseType {
     type: Type
 }
 
-export interface InterfaceProperty {
-    name: string,
-    type?: Type,
-    isReadonly?: boolean,
-    isOptional: boolean
-}
-
 export interface InterfaceDecl extends NodeWithManyLOC {
-    properties: Array<InterfaceProperty|IndexSignatureDeclaration>,
+    properties: Array<Property|IndexSignatureDeclaration|ArrowFunction>,
     typeParameters?: Array<TypeParameter>
-    extends?: Type,
+    extends?: Array<Type>,
     implements?: Array<Type>
 }
 
@@ -287,4 +288,16 @@ export interface TemplateLiteralType extends BaseType {
 export interface IndexAccessedType extends BaseType {
     object: Type,
     index: Type
+}
+
+/**
+ * Parameter can either be [[TypeKinds.THIS]] or a parameter name.
+ */
+export interface TypePredicateType extends BaseType {
+    parameter: Type|string, 
+    type: Type
+}
+
+export interface InferType extends BaseType {
+    typeParameter: TypeParameter
 }
