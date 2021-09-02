@@ -70,9 +70,9 @@ export class ReferenceManager {
         return;
     }
 
-    resolveExternalString(name: string, modules: Array<TypescriptExtractor>, moduleName?: string) : ReferenceType|undefined {
+    resolveExternalString(name: string, moduleName?: string) : ReferenceType|undefined {
         if (EXCLUDED_TYPE_REFS.includes(name)) return { kind: TypeReferenceKinds.DEFAULT_API, name };
-        for (const mod of modules) {
+        for (const mod of this.extractors) {
             const val = mod.forEachModule(mod.module, (module, path) => {
                 if (moduleName && moduleName !== module.name) return;
                 if (module.classes.has(name)) return { name, path, external: mod.module.name, kind: TypeReferenceKinds.CLASS };
