@@ -13,7 +13,9 @@ export class ExtractorList extends Array<TypescriptExtractor> {
         if (!packageJSONData) throw new Error("Couldn't find package.json");
         const lastItem = getLastItemFromPath(lastDir);
         const repo = getRepository(packageJSONData);
-        const module = createModule(packageJSONData.contents.name, true, repo && `${repo}/${lastItem}`, undefined);
+        let name = packageJSONData.contents.name;
+        if (name.includes("/")) name = name.split("/")[1];
+        const module = createModule(name, true, repo && `${repo}/${lastItem}`, undefined);
         const extractor: TypescriptExtractor = new TypescriptExtractor({
             module,
             basedir: lastItem,
