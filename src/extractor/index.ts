@@ -555,7 +555,9 @@ export class TypescriptExtractor {
         else if (ts.isIdentifier(exp)) {
             const sym = this.checker.getSymbolAtLocation(exp);
             if (!sym) return;
-            return { kind: TypeKinds.REFERENCE, type: this.references.resolveSymbol(sym, this) };
+            const type = this.references.resolveSymbol(sym, this);
+            if (!type) return;
+            return { kind: TypeKinds.REFERENCE, type };
         }
         switch (exp.kind) {
         case ts.SyntaxKind.BigIntLiteral:
