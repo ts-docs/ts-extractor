@@ -2,9 +2,11 @@
 
 Extracts modules, classes, interfaces, enums, type aliases and constants from typescript projects. 
 
-## What's special about this
+Check out the documentation [here](https://ts-docs.github.io/ts-docs/m.extractor/index.html).
 
-- **Clear project structure** - A project is made up of modules, and a "module" is either a folder or a namespace. Modules can contain other modules (sub-folders, other namespaces), or exported classes, interfaces, enums, functions, constants and types from each file inside the folder.
+## Features
+
+- **Clear project structure** - A project is made up of modules, and a "module" is either a folder or a namespace. Modules can contain other modules (sub-folders, other namespaces), or exported classes, interfaces, enums, functions, constants and types from each file inside the folder. This allows for very easy navigation.
 
 - **References** - Every type reference provides a **path** which leads to the module it's declared in, which allows for super easy and painless linking. 
 

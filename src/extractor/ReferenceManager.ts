@@ -5,7 +5,7 @@ import { ReferenceType, TypeReferenceKinds } from "../structure";
 import { hasBit } from "../util";
 import { ExtractorList } from "./ExtractorList";
 
-const EXCLUDED_TYPE_REFS = ["Promise", "ReadonlyArray", "Array", "Map", "Iterable", "IterableIterator", "Set", "Function", "Record", "Omit", "Pick", "Symbol", "Error", "URL", "EventTarget", "URLSearchParams", "Buffer", "Event", "EventTarget", "WebAssembly", "Date", "RegExp"];
+const EXCLUDED_TYPE_REFS = ["Promise", "ReadonlyArray", "Array", "Map", "Iterable", "IterableIterator", "Set", "Function", "Record", "Omit", "Pick", "Symbol", "Error", "URL", "EventTarget", "URLSearchParams", "Buffer", "Event", "EventTarget", "WebAssembly", "Date", "RegExp", "Partial"];
 
 export class ReferenceManager {
     basePath: string
@@ -70,9 +70,9 @@ export class ReferenceManager {
         return;
     }
 
-    resolveExternalString(name: string, modules: Array<TypescriptExtractor>, moduleName?: string) : ReferenceType|undefined {
+    resolveExternalString(name: string, moduleName?: string) : ReferenceType|undefined {
         if (EXCLUDED_TYPE_REFS.includes(name)) return { kind: TypeReferenceKinds.DEFAULT_API, name };
-        for (const mod of modules) {
+        for (const mod of this.extractors) {
             const val = mod.forEachModule(mod.module, (module, path) => {
                 if (moduleName && moduleName !== module.name) return;
                 if (module.classes.has(name)) return { name, path, external: mod.module.name, kind: TypeReferenceKinds.CLASS };
@@ -87,6 +87,15 @@ export class ReferenceManager {
             if (val) return val;
         }
         return;
+    }
+
+    resolveFirstAt(name: string, globalModuleName: string, moduleName?: string) : ReferenceType|undefined {
+        const mod = this.extractors.find(ext => ext.module.name === globalModuleName);
+        if (!mod) return;
+        const res = this.resolveString(name, mod, moduleName);
+        if (!res) return;
+        res.external = globalModuleName;
+        return res;
     }
     
     isDefault(thing: ts.Identifier) : boolean {
