@@ -58,6 +58,7 @@ export class ExternalLibManager {
         return {
             name,
             link: lib.resolver(name, path, symbol, kind),
+            external: lib.name,
             kind
         };
     }

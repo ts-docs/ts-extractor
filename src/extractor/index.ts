@@ -501,7 +501,7 @@ export class TypescriptExtractor {
             };
         }
         else switch (type.kind) {
-        //@ts-expect-error This shouldn't be erroring!
+        //@ts-expect-error This shouldn't be erroring.
         case ts.SyntaxKind.LiteralType: return this.resolveType((type as unknown as ts.LiteralType).literal);
         case ts.SyntaxKind.NumberKeyword: return {name: "number", kind: TypeKinds.NUMBER};
         case ts.SyntaxKind.StringKeyword: return {name: "string", kind: TypeKinds.STRING};
@@ -587,8 +587,10 @@ export class TypescriptExtractor {
     }
 
     resolveHeritage(param: ts.ExpressionWithTypeArguments) : Type {
-        if (ts.isPropertyAccessExpression(param.expression)) return this.resolveSymbol(param.expression.expression.getText(), param.typeArguments?.map(arg => this.resolveType(arg)), param.expression.name.text);
-        else if (ts.isIdentifier(param.expression)) return this.resolveSymbol(param.expression.text, param.typeArguments?.map(arg => this.resolveType(arg)));
+        const sym = this.checker.getSymbolAtLocation(param.expression);
+        if (sym) return this.resolveSymbol(sym, param.typeArguments?.map(arg => this.resolveType(arg)));
+        const type = this.references.resolveString(param.expression.getText(), this);
+        if (type) return { kind: TypeKinds.REFERENCE, type, typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))};
         return {
             type: {
                 name: param.expression.getText(),
