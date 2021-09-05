@@ -1,21 +1,36 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import ts from "typescript";
 import { TypescriptExtractor } from ".";
+import { ExternalLibManager } from "../external/ExternalManager";
 import { ReferenceType, TypeReferenceKinds } from "../structure";
 import { hasBit } from "../util";
 import { ExtractorList } from "./ExtractorList";
 
-const EXCLUDED_TYPE_REFS = ["Promise", "ReadonlyArray", "Array", "Map", "Iterable", "IterableIterator", "Set", "Function", "Record", "Omit", "Pick", "Symbol", "Error", "URL", "EventTarget", "URLSearchParams", "Buffer", "Event", "EventTarget", "WebAssembly", "Date", "RegExp"];
+const EXCLUDED_TYPE_REFS = ["Promise", "ReadonlyArray", "Array", "Map", "Iterable", "IterableIterator", "Set", "Function", "Record", "Omit", "Pick", "Symbol", "Error", "URL", "EventTarget", "URLSearchParams", "Buffer", "Event", "EventTarget", "WebAssembly", "Date", "RegExp", "Partial", "ArrayBuffer"];
 
 export class ReferenceManager {
-    basePath: string
     extractors: ExtractorList
-    constructor(extractors: ExtractorList, basePath = process.cwd()) {
-        this.basePath = basePath;
+    externals: ExternalLibManager
+    constructor(extractors: ExtractorList, externals: ExternalLibManager) {
         this.extractors = extractors;
+        this.externals = externals;
     }
 
     resolveSymbol(symbol: ts.Symbol, currentExt: TypescriptExtractor, moduleName?: string) : ReferenceType|undefined {
+        if (symbol.declarations && symbol.declarations.length && symbol.declarations.length === 1 && ts.isImportSpecifier(symbol.declarations[0])) {
+            const specifier = symbol.declarations[0];
+            const mod = specifier.parent.parent.parent.moduleSpecifier;
+            if (ts.isStringLiteral(mod)) {
+                const path = mod.text.split("/");
+                if (this.externals.libs.has(path[0])) return this.externals.resolveSymbol(symbol, path);
+                else if (specifier.propertyName) {
+                    const sym = currentExt.checker.getSymbolAtLocation(specifier.propertyName);
+                    if (sym) return this.resolveSymbol(sym, currentExt, moduleName);
+                    return this.resolveFirstAt(specifier.propertyName.text, path[0], moduleName);
+                }
+                else return this.resolveString(symbol.name, currentExt, moduleName);
+            }
+        } 
         const name = symbol.name;
         if (EXCLUDED_TYPE_REFS.includes(name)) return { kind: TypeReferenceKinds.DEFAULT_API, name };
         if (hasBit(symbol.flags, ts.SymbolFlags.Class)) return currentExt.forEachModule<ReferenceType>(currentExt.module, (mod, path) => {
@@ -87,6 +102,15 @@ export class ReferenceManager {
             if (val) return val;
         }
         return;
+    }
+
+    resolveFirstAt(name: string, globalModuleName: string, moduleName?: string) : ReferenceType|undefined {
+        const mod = this.extractors.find(ext => ext.module.name === globalModuleName);
+        if (!mod) return;
+        const res = this.resolveString(name, mod, moduleName);
+        if (!res) return;
+        res.external = globalModuleName;
+        return res;
     }
     
     isDefault(thing: ts.Identifier) : boolean {

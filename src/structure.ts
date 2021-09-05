@@ -115,7 +115,8 @@ export const enum TypeReferenceKinds {
     STRINGIFIED_UNKNOWN,
     ENUM_MEMBER,
     DEFAULT_API,
-    NAMESPACE_OR_MODULE
+    NAMESPACE_OR_MODULE,
+    EXTERNAL
 }
 
 
@@ -124,6 +125,7 @@ export interface ReferenceType {
     displayName?: string,
     path?: Array<string>,
     external?: string,
+    link?: string,
     kind: TypeReferenceKinds
 }
 

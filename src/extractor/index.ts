@@ -361,12 +361,7 @@ export class TypescriptExtractor {
                     }
                 };
             }
-            if (symbol.declarations && symbol.declarations.length && ts.isImportSpecifier(symbol.declarations[0]) && symbol.declarations[0].propertyName) {
-                const sym = this.checker.getSymbolAtLocation(symbol.declarations[0].propertyName);
-                if (sym) symbolRef = this.references.resolveSymbol(sym, this);
-                else symbolRef = this.references.resolveString(symbol.declarations[0].propertyName.text, this);
-            }
-            else symbolRef = this.references.resolveSymbol(symbol, this, moduleName);
+            symbolRef = this.references.resolveSymbol(symbol, this, moduleName);
         } else symbolRef = this.references.resolveString(symbol, this, moduleName);
         if (symbolRef) return { type: symbolRef, typeParameters, kind: TypeKinds.REFERENCE };
         return { type: { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeReferenceKinds.UNKNOWN }, kind: TypeKinds.REFERENCE, typeParameters };
