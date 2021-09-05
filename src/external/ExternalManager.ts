@@ -55,9 +55,11 @@ export class ExternalLibManager {
             else if (mod.constants.has(name)) kind = TypeReferenceKinds.CONSTANT;
             else if (mod.namespaces.has(name)) kind = TypeReferenceKinds.NAMESPACE_OR_MODULE;
         }
+        const link = lib.resolver(name, path, symbol, kind);
+        if (!link) return;
         return {
             name,
-            link: lib.resolver(name, path, symbol, kind),
+            link,
             external: lib.name,
             kind
         };
