@@ -14,11 +14,31 @@ Check out the documentation [here](https://ts-docs.github.io/ts-docs/m.extractor
 
 - **JSDoc support** - Extracts all JSDoc tags, along with their comments and type.
 
+- **External references** - Easily add external references which can link to other documentation sites.
+
 ## Install
 
 ```npm i @ts-docs/extractor```
 
 ## Examples
 
-Check out the examples [here](https://github.com/ts-docs/ts-extractor/tree/main/examples)
+Check out some examples [here](https://github.com/ts-docs/ts-extractor/tree/main/examples)
 
+### External References
+
+Let's assume you have some module which uses `node-fetch` and some of it's types.
+
+```ts
+extract(["./entry-point"], [
+    {
+        name: "node-fetch",
+        resolver: (name) => {
+            // "name" is the name of the reference
+            switch(name) {
+                case "Response": return "https://github.com/node-fetch/node-fetch#class-response";
+                case "Request": return "https://github.com/node-fetch/node-fetch#class-request";
+            }
+        }
+    }
+]);
+```

@@ -361,19 +361,7 @@ export class TypescriptExtractor {
                     }
                 };
             }
-            if (symbol.declarations && symbol.declarations.length && ts.isImportSpecifier(symbol.declarations[0]) && symbol.declarations[0].propertyName) {
-                const sym = this.checker.getSymbolAtLocation(symbol.declarations[0].propertyName);
-                if (sym) symbolRef = this.references.resolveSymbol(sym, this);
-                else {
-                    const modName = symbol.declarations[0].parent.parent.parent.moduleSpecifier;
-                    if (ts.isStringLiteral(modName)) {
-                        const name = modName.text.includes("/") ? modName.text.split("/")[0]:modName.text;
-                        symbolRef = this.references.resolveFirstAt(symbol.declarations[0].propertyName.text, name);
-                    } 
-                    else symbolRef = this.references.resolveString(symbol.declarations[0].propertyName.text, this);
-                }
-            }
-            else symbolRef = this.references.resolveSymbol(symbol, this, moduleName);
+            symbolRef = this.references.resolveSymbol(symbol, this, moduleName);
         } else symbolRef = this.references.resolveString(symbol, this, moduleName);
         if (symbolRef) return { type: symbolRef, typeParameters, kind: TypeKinds.REFERENCE };
         return { type: { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeReferenceKinds.UNKNOWN }, kind: TypeKinds.REFERENCE, typeParameters };
@@ -395,7 +383,10 @@ export class TypescriptExtractor {
                     kind: TypeKinds.REFERENCE
                 };
             }
-            if (symbol.name === "unknown" && ts.isQualifiedName(type.typeName)) return this.resolveSymbol(type.typeName.right.text, typeParameters, type.typeName.left.getText());
+            if (ts.isQualifiedName(type.typeName)) {
+                const res = this.references.resolveQualified(type.typeName, this);
+                if (res) return { type: res, typeParameters, kind: TypeKinds.REFERENCE };
+            }
             return this.resolveSymbol(symbol, typeParameters);
         }
         else if (ts.isFunctionTypeNode(type)) {
@@ -513,7 +504,7 @@ export class TypescriptExtractor {
             };
         }
         else switch (type.kind) {
-        //@ts-expect-error This shouldn't be erroring!
+        //@ts-expect-error This shouldn't be erroring.
         case ts.SyntaxKind.LiteralType: return this.resolveType((type as unknown as ts.LiteralType).literal);
         case ts.SyntaxKind.NumberKeyword: return {name: "number", kind: TypeKinds.NUMBER};
         case ts.SyntaxKind.StringKeyword: return {name: "string", kind: TypeKinds.STRING};
@@ -537,35 +528,11 @@ export class TypescriptExtractor {
     }
 
     resolveExpressionToType(exp: ts.Node) : Type|undefined {
-        if (ts.isNewExpression(exp) && ts.isIdentifier(exp.expression)) return this.resolveSymbol(exp.expression.text, exp.typeArguments?.map(arg => this.resolveType(arg)));
-        else if (ts.isPropertyAccessExpression(exp)) {
-            const sym = this.checker.getSymbolAtLocation(exp);
-            if (sym) {
-                if (hasBit(sym.flags, ts.SymbolFlags.EnumMember)) {
-                    const enumSym = this.checker.getSymbolAtLocation(exp.expression);
-                    if (!enumSym) return;
-                    const thing = this.references.resolveSymbol(enumSym, this);
-                    if (!thing) return;
-                    return {
-                        kind: TypeKinds.REFERENCE,
-                        type: {
-                            displayName: exp.name.text,
-                            name: thing.name,
-                            path: thing.path,
-                            external: thing.external,
-                            kind: TypeReferenceKinds.ENUM_MEMBER
-                        }
-                    };
-                }
-            }
+        if (ts.isNewExpression(exp)) {
+            if (ts.isIdentifier(exp.expression)) return this.resolveSymbol(exp.expression.text, exp.typeArguments?.map(arg => this.resolveType(arg)));
         }
-        else if (ts.isIdentifier(exp)) {
-            const sym = this.checker.getSymbolAtLocation(exp);
-            if (!sym) return;
-            const type = this.references.resolveSymbol(sym, this);
-            if (!type) return;
-            return { kind: TypeKinds.REFERENCE, type };
-        }
+        const sym = this.checker.getSymbolAtLocation(exp);
+        if (sym) return this.resolveSymbol(sym);
         switch (exp.kind) {
         case ts.SyntaxKind.BigIntLiteral:
         case ts.SyntaxKind.NumericLiteral: return { name: exp.getText(), kind: TypeKinds.NUMBER_LITERAL };
@@ -599,8 +566,10 @@ export class TypescriptExtractor {
     }
 
     resolveHeritage(param: ts.ExpressionWithTypeArguments) : Type {
-        if (ts.isPropertyAccessExpression(param.expression)) return this.resolveSymbol(param.expression.expression.getText(), param.typeArguments?.map(arg => this.resolveType(arg)), param.expression.name.text);
-        else if (ts.isIdentifier(param.expression)) return this.resolveSymbol(param.expression.text, param.typeArguments?.map(arg => this.resolveType(arg)));
+        const sym = this.checker.getSymbolAtLocation(param.expression);
+        if (sym) return this.resolveSymbol(sym, param.typeArguments?.map(arg => this.resolveType(arg)));
+        const type = this.references.resolveString(param.expression.getText(), this);
+        if (type) return { kind: TypeKinds.REFERENCE, type, typeParameters: param.typeArguments?.map(arg => this.resolveType(arg))};
         return {
             type: {
                 name: param.expression.getText(),

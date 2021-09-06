@@ -115,15 +115,23 @@ export const enum TypeReferenceKinds {
     STRINGIFIED_UNKNOWN,
     ENUM_MEMBER,
     DEFAULT_API,
-    NAMESPACE_OR_MODULE
+    NAMESPACE_OR_MODULE,
+    EXTERNAL
 }
 
-
+/**
+ * If the object's [[ReferenceType.link]] property is not undefined, then that means it's an **external**
+ * object. The [[ReferenceType.external]] property will be set to the external library's name.
+ * 
+ * [[ReferenceType.displayName]] is only present when the referenced item is an **enum member**. The
+ * property will be set to the member's name, while the **name** property will be set to the enum name.
+ */
 export interface ReferenceType {
     name: string,
     displayName?: string,
     path?: Array<string>,
     external?: string,
+    link?: string,
     kind: TypeReferenceKinds
 }
 

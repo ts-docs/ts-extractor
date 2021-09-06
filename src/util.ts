@@ -74,3 +74,47 @@ export function getReadme(dir: string) : string|undefined {
     if (newPath === dir) return undefined;
     return getReadme(newPath);
 }
+
+export function resolvePathOfQualified(node: ts.QualifiedName) : Array<ts.Identifier> {
+    const path = [];
+    let last = node.left;
+    while (last) {
+        if (ts.isQualifiedName(last)) {
+            path.push(last.right);
+            last = last.left;
+        }
+        else {
+            path.push(last);
+            break;
+        }
+    }
+    path.reverse();
+    path.push(node.right);
+    return path;
+}
+
+export function resolveLinkAndNameOfImport(symbol: ts.Symbol) : { link: string, name: ts.Identifier } | undefined {
+    if (symbol.declarations && symbol.declarations.length === 1) {
+        const specifier = symbol.declarations[0];
+        let mod;
+        let propName;
+        if (ts.isImportSpecifier(specifier)) {
+            mod = specifier.parent.parent.parent.moduleSpecifier;
+            propName = specifier.propertyName ? specifier.propertyName : specifier.name;
+        }
+        else if (ts.isImportClause(specifier)) {
+            mod = specifier.parent.moduleSpecifier;
+            propName = specifier.name;
+        }
+        else if (ts.isNamespaceImport(specifier)) {
+            mod = specifier.parent.parent.moduleSpecifier;
+            propName = specifier.name;
+        }
+        if (!mod || !propName || !ts.isStringLiteral(mod)) return;
+        return {
+            link: mod.text,
+            name: propName
+        };
+    }
+    return;
+}

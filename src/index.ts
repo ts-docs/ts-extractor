@@ -4,13 +4,15 @@ import path from "path";
 import { findPackageJSON, findTSConfigDown, getReadme, getRepository  } from "./util";
 import { ExtractorList } from "./extractor/ExtractorList";
 import { ReferenceManager } from "./extractor/ReferenceManager";
+import { ExternalLibManager, ExternalLib } from "./external/ExternalManager";
 
-export function extract(rootFiles: Array<string>) : [ExtractorList, ts.CompilerOptions] {
+export function extract(rootFiles: Array<string>, libs: Array<ExternalLib> = []) : [ExtractorList, ts.CompilerOptions] {
     const tsconfig = findTSConfigDown();
     if (!tsconfig) throw new Error("Couldn't find tsconfig.json");
     
     const extractors = new ExtractorList();
-    const references = new ReferenceManager(extractors);
+    const externalLibs = new ExternalLibManager(libs);
+    const references = new ReferenceManager(extractors, externalLibs);
 
     const sourceFiles: Array<readonly ts.SourceFile[]> = [];
 
@@ -22,13 +24,15 @@ export function extract(rootFiles: Array<string>) : [ExtractorList, ts.CompilerO
         const arr = [];
 
         for (const file of program.getSourceFiles()) {
-            if (file.isDeclarationFile) continue;
+            if (file.isDeclarationFile) {
+                if (libs.length && !file.hasNoDefaultLib) externalLibs.attemptToAddSource(file);
+                continue;
+            }
             extractor.runPreparerOnFile(file);
             arr.push(file);
         }
 
         sourceFiles.push(arr);
-
     }
 
     for (let i=0; i < extractors.length; i++) {
