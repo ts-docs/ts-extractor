@@ -44,3 +44,7 @@ export function getReadme(dir: string) : string|undefined {
     if (fs.existsSync(pathToReadme)) return fs.readFileSync(pathToReadme, "utf-8");
     return;
 }
+
+export function hasBit(num: number, bit: number) : boolean {
+    return (num & bit) !== 0;
+}

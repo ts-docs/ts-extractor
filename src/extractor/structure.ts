@@ -9,6 +9,7 @@ export interface Module {
     types: Map<string, TypeDecl>,
     enums: Map<string, EnumDecl>,
     constants: Map<string, ConstantDecl>,
+    reExports: Array<Module|ReferenceType> 
     repository?: string,
     isGlobal?: boolean,
     isNamespace?: boolean
@@ -60,6 +61,7 @@ export function createModule(name: string, isGlobal?: boolean, repository?: stri
         types: new Map(),
         enums: new Map(),
         constants: new Map(),
+        reExports: [],
         isGlobal,
         isNamespace
     };
