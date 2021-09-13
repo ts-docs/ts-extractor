@@ -9,10 +9,13 @@ export interface Module {
     types: Map<string, TypeDecl>,
     enums: Map<string, EnumDecl>,
     constants: Map<string, ConstantDecl>,
-    reExports: Array<Module|ReferenceType> 
     repository?: string,
     isGlobal?: boolean,
-    isNamespace?: boolean
+    isNamespace?: boolean,
+    reExports?: Array<{
+        exports: Array<string>,
+        location: string
+    }>
 }
 
 export interface JSDocTag {

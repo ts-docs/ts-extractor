@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import ts from "typescript";
 import { findPackageJSON, PackageJSON, removePartOfPath } from "../utils";
+import { createHost } from "./Host";
 import { Project } from "./Project";
 
 
@@ -24,33 +25,29 @@ export class TypescriptExtractor {
         if (tsconfig.error) throw new Error(ts.flattenDiagnosticMessageText(tsconfig.error.messageText, "\n"));
         
         const options = tsconfig.config.compilerOptions || ts.getDefaultCompilerOptions();
-
-        const packages = new Map<string, PackageJSON>();
+        const packagesMap = new Map<string, string>(); // package name - package path
+        const packageJSONs = new Map<string, PackageJSON>();
         for (const entryPoint of this.settings.entryPoints) {
-            const json = findPackageJSON(entryPoint);
-            if (!json) throw new Error("Couldn't find package.json file.");
-            packages.set(entryPoint, json);
-            if (options.paths) options.paths[json.contents.name] = [entryPoint.split("/")[0]];
-            else options.paths = { [json.contents.name]: [entryPoint.split("/")[0]] };
+            const packageJSON = findPackageJSON(entryPoint);
+            if (!packageJSON) throw new Error("Couldn't find package.json file.");
+            packagesMap.set(packageJSON.contents.name, entryPoint);
+            packageJSONs.set(entryPoint, packageJSON);
         }
 
-        options.baseUrl = ".";
-
-        console.log(options);
-
-        const program = ts.createProgram({  rootNames: this.settings.entryPoints, options });
+        const host = createHost(options, packagesMap);
+        const program = ts.createProgram(this.settings.entryPoints, options, host);
 
         const checker = program.getTypeChecker();
-        const projects = new Map<string, Project>();
+        const projects = [];
         const base = process.cwd().split(path.sep);
         for (const entryPoint of this.settings.entryPoints) {
-            const sourceFile = program.getSourceFile(path.join(process.cwd(), `${entryPoint}.ts`));
+            const sourceFile = program.getSourceFile(path.join(process.cwd(), entryPoint));
             if (!sourceFile) continue;
-            const newPath = removePartOfPath(sourceFile.fileName, base);
-            const project = new Project({folderPath: newPath, program, checker, settings: this.settings, packageJSON: packages.get(entryPoint) as PackageJSON});
-            projects.set(newPath[0], project);
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            const project = new Project({folderPath: removePartOfPath(sourceFile.fileName, base), program, checker, settings: this.settings, packageJSON: packageJSONs.get(entryPoint)! });
+            projects.push(project);
             project.visitor(sourceFile);
         }
-        return [...projects.values()];
+        return projects;
     }
 }

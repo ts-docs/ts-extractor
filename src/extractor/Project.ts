@@ -28,7 +28,7 @@ export class Project {
         settings: TypescriptExtractorSettings, 
         checker: ts.TypeChecker,
         program: ts.Program,
-        packageJSON: PackageJSON
+        packageJSON: PackageJSON,
     }) {
         folderPath.pop(); // Removes the file name
         this.baseDir = folderPath[folderPath.length - 1];
@@ -48,6 +48,7 @@ export class Project {
         if (!sym || !sym.exports) return;
         //@ts-expect-error You should be able to iterate through symbol.exports
         for (const [, val] of sym.exports) {
+            // export * from "..."
             if (val.name === "__export") {
                 for (const decl of val.declarations!) {
                     if (ts.isExportDeclaration(decl) && decl.moduleSpecifier && ts.isStringLiteral(decl.moduleSpecifier)) {
@@ -66,19 +67,16 @@ export class Project {
                 else if (hasBit(val.flags, ts.SymbolFlags.Namespace)) type = "namespace";
                 else if (hasBit(val.flags, ts.SymbolFlags.Variable)) type = "variable";
                 else if (hasBit(val.flags, ts.SymbolFlags.Function)) type = "function";
+                // export { ... } from "...";
+                // export { ... };
                 else {
                     const aliased = this.resolveAliasedSymbol(val);       
-                    if (aliased.name === "unknown") return;
                     const mod = createModule(val.name, false, undefined, true);
                     currentModule.modules.set(val.name, mod);
                     this.visitor(aliased, mod);
                     continue;
                 }
-                if (val.name === "ShardClient" && type === "class") {
-                    console.dir(this.checker.getSymbolAtLocation(val.declarations[0].members.find((member: ts.Node) => ts.isPropertyDeclaration(member) && member.name.getText() === "gateway").type.typeName), {depth: 1});
-                }
-                if (val.name === "Socket" && currentModule.name === "Gateway") console.dir(val, {depth: 1});
-                //console.log(type, val.name, currentModule.name);
+                console.log(type, val.name, currentModule.name);
             }
         }
     }
@@ -100,6 +98,16 @@ export class Project {
             else lastModule = newMod;
         }
         return lastModule;
+    }
+
+    forEachModule<R>(module = this.module, cb: (module: Module, path: Array<string>) => R|undefined, pathToMod: Array<string> = []) : R|undefined {
+        const firstCb = cb(module, pathToMod);
+        if (firstCb) return firstCb;
+        for (const [, mod] of module.modules) {
+            const res = this.forEachModule(mod, cb, [...pathToMod, mod.name]);
+            if (res) return res;
+        }
+        return undefined;
     }
 
     handleClassDecl(_classDecl: ts.ClassDeclaration, currentModule: Module) : void {
