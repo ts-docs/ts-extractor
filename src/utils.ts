@@ -2,10 +2,14 @@ import { execSync } from "child_process";
 import fs from "fs";
 import path from "path";
 
-export function removePartOfPath(tsPath: string, toRemove: Array<string>) : Array<string> {
+export function removePartOfEndOfPath(tsPath: string, toRemove: Array<string>) : Array<string> {
     const newPath = tsPath.split("/");
     if (toRemove.length > newPath.length) return newPath;
     return newPath.slice(toRemove.length);
+}
+
+export function removePartOfPath(path: Array<string>, parts: Array<string>) : string {
+    return path.filter(p => !parts.includes(p)).join("/");
 }
 
 export interface PackageJSON { 

@@ -2,14 +2,15 @@
 import fs from "fs";
 import path from "path";
 import ts from "typescript";
-import { findPackageJSON, PackageJSON, removePartOfPath } from "../utils";
+import { findPackageJSON, PackageJSON, removePartOfEndOfPath } from "../utils";
 import { createHost } from "./Host";
 import { Project } from "./Project";
 
 
 export interface TypescriptExtractorSettings {
     entryPoints: Array<string>,
-    ignoreModuleNames?: Array<string>
+    ignoreModuleNames?: Array<string>,
+    ignoreFolderNames?: Array<string>
 }
 
 export class TypescriptExtractor {
@@ -27,14 +28,19 @@ export class TypescriptExtractor {
         const options = tsconfig.config.compilerOptions || ts.getDefaultCompilerOptions();
         const packagesMap = new Map<string, string>(); // package name - package path
         const packageJSONs = new Map<string, PackageJSON>();
-        for (const entryPoint of this.settings.entryPoints) {
+        for (let i=0; i < this.settings.entryPoints.length; i++) {
+            let entryPoint = this.settings.entryPoints[i];
+            if (!entryPoint.endsWith("ts")) {
+                entryPoint = `${entryPoint}.ts`;
+                this.settings.entryPoints[i] = entryPoint;
+            }
             const packageJSON = findPackageJSON(entryPoint);
             if (!packageJSON) throw new Error("Couldn't find package.json file.");
             packagesMap.set(packageJSON.contents.name, entryPoint);
             packageJSONs.set(entryPoint, packageJSON);
         }
 
-        const host = createHost(options, packagesMap);
+        const host = createHost(options, packagesMap, this.settings);
         const program = ts.createProgram(this.settings.entryPoints, options, host);
 
         const checker = program.getTypeChecker();
@@ -44,7 +50,7 @@ export class TypescriptExtractor {
             const sourceFile = program.getSourceFile(path.join(process.cwd(), entryPoint));
             if (!sourceFile) continue;
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            const project = new Project({folderPath: removePartOfPath(sourceFile.fileName, base), program, checker, settings: this.settings, packageJSON: packageJSONs.get(entryPoint)! });
+            const project = new Project({folderPath: removePartOfEndOfPath(sourceFile.fileName, base), program, checker, settings: this.settings, packageJSON: packageJSONs.get(entryPoint)! });
             projects.push(project);
             project.visitor(sourceFile);
         }

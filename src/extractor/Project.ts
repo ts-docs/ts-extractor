@@ -62,10 +62,7 @@ export class Project {
                         this.visitor(reExportedFile);
                     }
                 } 
-            } else {
-                this.handleSymbol(val);
-                //console.log(type, val.name, currentModule.name);
-            }
+            } else this.handleSymbol(val);
         }
 
     }
@@ -103,7 +100,7 @@ export class Project {
         return undefined;
     }
 
-    handleSymbol(val: ts.Symbol) : void {
+    handleSymbol(val: ts.Symbol, ogName?: string) : void {
         if (!val.declarations || !val.declarations.length) return;
         if (hasBit(val.flags, ts.SymbolFlags.Class)) this.handleClassDecl(val.declarations[0] as ts.ClassDeclaration);
         else if (hasBit(val.flags, ts.SymbolFlags.Interface)) this.handleInterfaceDecl(val.declarations as Array<ts.InterfaceDeclaration>);
@@ -114,7 +111,6 @@ export class Project {
         else if (hasBit(val.flags, ts.SymbolFlags.Function)) this.handleFunctionDecl(val.declarations[0] as ts.FunctionDeclaration);
         else {
             const aliased = this.resolveAliasedSymbol(val);
-            //if (aliased.name === "unknown") console.log(val.name, val.flags, val.declarations.length);
             if (aliased.name.includes("/")) return this.visitor(aliased);
             else this.handleSymbol(aliased);
         }
