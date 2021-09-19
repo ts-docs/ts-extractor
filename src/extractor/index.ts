@@ -5,6 +5,7 @@ import ts from "typescript";
 import { findPackageJSON, PackageJSON, removePartOfEndOfPath } from "../utils";
 import { createHost } from "./Host";
 import { Project } from "./Project";
+import { ReferenceManager } from "./ReferenceManager";
 
 
 export interface TypescriptExtractorSettings {
@@ -15,8 +16,12 @@ export interface TypescriptExtractorSettings {
 
 export class TypescriptExtractor {
     settings: TypescriptExtractorSettings
+    checker!: ts.TypeChecker
+    program!: ts.Program
+    refs: ReferenceManager
     constructor(settings: TypescriptExtractorSettings) {
         this.settings = settings;
+        this.refs = new ReferenceManager();
     }
 
     run() : Array<Project> {
@@ -41,16 +46,16 @@ export class TypescriptExtractor {
         }
 
         const host = createHost(options, packagesMap, this.settings);
-        const program = ts.createProgram(this.settings.entryPoints, options, host);
+        this.program = ts.createProgram(this.settings.entryPoints, options, host);
 
-        const checker = program.getTypeChecker();
+        this.checker = this.program.getTypeChecker();
         const projects = [];
         const base = process.cwd().split(path.sep);
         for (const entryPoint of this.settings.entryPoints) {
-            const sourceFile = program.getSourceFile(path.join(process.cwd(), entryPoint));
+            const sourceFile = this.program.getSourceFile(path.join(process.cwd(), entryPoint));
             if (!sourceFile) continue;
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            const project = new Project({folderPath: removePartOfEndOfPath(sourceFile.fileName, base), program, checker, settings: this.settings, packageJSON: packageJSONs.get(entryPoint)! });
+            const project = new Project({folderPath: removePartOfEndOfPath(sourceFile.fileName, base), extractor: this, packageJSON: packageJSONs.get(entryPoint)! });
             projects.push(project);
             project.visitor(sourceFile);
         }

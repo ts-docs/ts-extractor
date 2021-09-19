@@ -12,6 +12,10 @@ export function removePartOfPath(path: Array<string>, parts: Array<string>) : st
     return path.filter(p => !parts.includes(p)).join("/");
 }
 
+export function getLastItemFromPath(p: string) : string {
+    return path.parse(p).base;
+}
+
 export interface PackageJSON { 
     contents: Record<string, string>,
     path: string

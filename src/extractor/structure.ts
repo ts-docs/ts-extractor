@@ -3,12 +3,12 @@ import ts from "typescript";
 export interface Module {
     name: string,
     modules: Map<string, Module>,
-    classes: Map<string, ClassDecl>,
-    functions: Map<string, FunctionDecl>,
-    interfaces: Map<string, InterfaceDecl>,
-    types: Map<string, TypeDecl>,
-    enums: Map<string, EnumDecl>,
-    constants: Map<string, ConstantDecl>,
+    classes: ClassDecl[],
+    functions: FunctionDecl[],
+    interfaces: InterfaceDecl[],
+    types: TypeDecl[],
+    enums: EnumDecl[],
+    constants: ConstantDecl[],
     repository?: string,
     isGlobal?: boolean,
     isNamespace?: boolean,
@@ -16,6 +16,7 @@ export interface Module {
         exports: Array<string>,
         location: string
     }>
+    path: Array<string>
 }
 
 export interface JSDocTag {
@@ -53,20 +54,21 @@ export type NodeWithManyLOC = {
 }
 
 
-export function createModule(name: string, isGlobal?: boolean, repository?: string, isNamespace?: boolean) : Module {
+export function createModule(name: string, path: Array<string>, isGlobal?: boolean, repository?: string, isNamespace?: boolean) : Module {
     return {
         name,
         repository,
         modules: new Map(),
-        classes: new Map(),
-        functions: new Map(),
-        interfaces: new Map(),
-        types: new Map(),
-        enums: new Map(),
-        constants: new Map(),
+        classes: [],
+        functions: [],
+        interfaces: [],
+        types: [],
+        enums: [],
+        constants: [],
         reExports: [],
         isGlobal,
-        isNamespace
+        isNamespace,
+        path
     };
 }
 
@@ -105,7 +107,7 @@ export const enum TypeKinds {
     THIS,
     NEVER,
     OBJECT,
-    INFER_TYPE
+    INFER_TYPE,
 }
 
 export const enum TypeReferenceKinds {
@@ -119,24 +121,24 @@ export const enum TypeReferenceKinds {
     UNKNOWN,
     STRINGIFIED_UNKNOWN,
     ENUM_MEMBER,
-    DEFAULT_API,
-    NAMESPACE_OR_MODULE,
-    EXTERNAL
+    NAMESPACE_OR_MODULE
 }
 
 /**
  * If the object's [[ReferenceType.link]] property is not undefined, then that means it's an **external**
- * object. The [[ReferenceType.external]] property will be set to the external library's name.
+ * object. The [[ReferenceType.moduleName]] property will be set to the external library's name.
  * 
  * [[ReferenceType.displayName]] is only present when the referenced item is an **enum member**. The
  * property will be set to the member's name, while the **name** property will be set to the enum name.
+ * 
+ * Type parameters and [[TypeReferenceKinds.STRINGIFIED_UNKNOWN]] do not have a [[ReferenceType.moduleName]] property.
  */
 export interface ReferenceType {
     name: string,
     displayName?: string,
     path?: Array<string>,
-    external?: string,
     link?: string,
+    moduleName?: string,
     kind: TypeReferenceKinds
 }
 
@@ -146,7 +148,7 @@ export interface BaseType {
 
 export interface Reference extends BaseType {
     type: ReferenceType,
-    typeParameters?: Array<Type>
+    typeArguments?: Array<Type>
 }
 
 export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType | TypePredicateType | InferType;
@@ -234,7 +236,7 @@ export interface ObjectLiteral extends BaseType {
 }
 
 // a | b , a & b
-export interface UnionOrIntersection  extends BaseType {
+export interface UnionOrIntersection extends BaseType {
     types: Array<Type>
 }
 
