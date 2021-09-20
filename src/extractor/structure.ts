@@ -278,7 +278,7 @@ export interface EnumMember extends Node {
 
 export interface EnumDecl extends NodeWithManyLOC {
     members: Array<EnumMember>
-    const: boolean
+    isConst: boolean
 }
 
 export interface MappedType extends BaseType {

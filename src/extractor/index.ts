@@ -11,7 +11,8 @@ import { ReferenceManager } from "./ReferenceManager";
 export interface TypescriptExtractorSettings {
     entryPoints: Array<string>,
     ignoreModuleNames?: Array<string>,
-    ignoreFolderNames?: Array<string>
+    ignoreFolderNames?: Array<string>,
+    maxConstantTextLength?: number
 }
 
 export class TypescriptExtractor {
@@ -31,6 +32,8 @@ export class TypescriptExtractor {
         if (tsconfig.error) throw new Error(ts.flattenDiagnosticMessageText(tsconfig.error.messageText, "\n"));
         
         const options = tsconfig.config.compilerOptions || ts.getDefaultCompilerOptions();
+        options.types = [];
+        options.noLib = true;
         const packagesMap = new Map<string, string>(); // package name - package path
         const packageJSONs = new Map<string, PackageJSON>();
         for (let i=0; i < this.settings.entryPoints.length; i++) {

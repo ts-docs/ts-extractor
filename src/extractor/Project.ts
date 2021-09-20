@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import path from "path";
 import ts from "typescript";
@@ -104,19 +103,25 @@ export class Project {
             }
         }
         if (hasBit(val.flags, ts.SymbolFlags.Class)) return this.handleClassDecl(val, currentModule);
-        //else if (hasBit(val.flags, ts.SymbolFlags.Interface)) return this.handleInterfaceDecl(val.declarations as Array<ts.InterfaceDeclaration>, currentModule);
-        //else if (hasBit(val.flags, ts.SymbolFlags.Enum)) return this.handleEnumDecl(val.declarations as Array<ts.EnumDeclaration>, currentModule);
-        //else if (hasBit(val.flags, ts.SymbolFlags.TypeAlias)) return this.handleTypeAliasDecl(val.declarations[0] as ts.TypeAliasDeclaration, currentModule);
+        else if (hasBit(val.flags, ts.SymbolFlags.Interface)) return this.handleInterfaceDecl(val, currentModule);
+        else if (hasBit(val.flags, ts.SymbolFlags.Enum)) return this.handleEnumDecl(val, currentModule);
+        else if (hasBit(val.flags, ts.SymbolFlags.TypeAlias)) return this.handleTypeAliasDecl(val, currentModule);
         else if (hasBit(val.flags, ts.SymbolFlags.Module)) return this.handleNamespaceDecl(val, currentModule);
-        // if (hasBit(val.flags, ts.SymbolFlags.Variable)) return this.handleVariableDecl(val.declarations[0] as ts.VariableDeclaration, currentModule);
-        //else if (hasBit(val.flags, ts.SymbolFlags.Function)) return this.handleFunctionDecl(val.declarations[0] as ts.FunctionDeclaration, currentModule);
-        //else if (hasBit(val.flags, ts.SymbolFlags.EnumMember)) return undefined;
+        else if (hasBit(val.flags, ts.SymbolFlags.Variable)) return this.handleVariableDecl(val.declarations[0] as ts.VariableDeclaration, currentModule);
+        else if (hasBit(val.flags, ts.SymbolFlags.Function)) return this.handleFunctionDecl(val, currentModule);
+        else if (hasBit(val.flags, ts.SymbolFlags.EnumMember)) {
+            //@ts-expect-error Private property
+            this.handleEnumDecl(val.parent, currentModule);
+            return this.extractor.refs.get(val);
+        }
         else {
             const aliased = this.resolveAliasedSymbol(val);
             if (aliased.name.includes("/")) {
                 this.visitor(aliased);
                 return;
             }
+            if (this.extractor.refs.has(aliased)) return this.extractor.refs.get(aliased);
+            //console.log(val.name, aliased.name, this.extractor.refs.has(aliased));
             return;
         }
     }
@@ -124,7 +129,7 @@ export class Project {
     handleClassDecl(symbol: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
         const decl = symbol.declarations![0] as ts.ClassDeclaration;
         if (!currentModule) currentModule = this.getOrCreateModule(decl.getSourceFile().fileName);
-        const name = decl.name ? decl.name.text : "export default";
+        const name = symbol.name;
         const ref = {
             name,
             path: currentModule.path,
@@ -253,16 +258,108 @@ export class Project {
         return ref;
     }
 
-    handleInterfaceDecl(_decls: Array<ts.InterfaceDeclaration>, _currentModule = this.getOrCreateModule(_decls[0].getSourceFile().fileName)) : ReferenceType | undefined {
+    handleInterfaceDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
+        const firstDecl = sym.declarations![0] as ts.InterfaceDeclaration;
+        if (!currentModule) currentModule = this.getOrCreateModule(firstDecl.getSourceFile().fileName);
+        const ref = {
+            name: sym.name,
+            path: currentModule.path,
+            moduleName: this.module.name,
+            kind: TypeReferenceKinds.INTERFACE
+        };
+        this.extractor.refs.set(sym, ref);
+        const properties = [];
+        const loc = [];
+        const jsDoc = [];
+        for (const decl of (sym.declarations as Array<ts.InterfaceDeclaration>)) {
+            for (const member of decl.members) properties.push(this.resolveProperty(member));
+            loc.push(this.getLOC(currentModule, decl));
+            const jsdoc = this.getJSDocData(decl);
+            if (jsdoc) jsDoc.push(...jsdoc);
+        }
+        let extendsInt, implementsInt;
+        if (firstDecl.heritageClauses) {
+            const extendsClause = firstDecl.heritageClauses.find(c => c.token === ts.SyntaxKind.ExtendsKeyword);
+            extendsInt = extendsClause && extendsClause.types.map(t => this.resolveHeritage(t));
+            const implementsClause = firstDecl.heritageClauses.find(c => c.token === ts.SyntaxKind.ImplementsKeyword);
+            implementsInt = implementsClause && implementsClause.types.map(impl => this.resolveType(impl));
+        }
+        currentModule.interfaces.push({
+            name: sym.name,
+            extends: extendsInt,
+            implements: implementsInt,
+            loc,
+            properties,
+            jsDoc,
+            typeParameters: firstDecl.typeParameters && firstDecl.typeParameters.map(p => this.resolveTypeParameters(p))
+        });
+        return ref;
+    }
+
+    handleEnumDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
+        const firstDecl = sym.declarations![0];
+        if (!currentModule) currentModule = this.getOrCreateModule(firstDecl.getSourceFile().fileName);
+        const ref = {
+            name: sym.name,
+            path: currentModule.path,
+            moduleName: this.module.name,
+            kind: TypeReferenceKinds.ENUM
+        };
+        this.extractor.refs.set(sym, ref);
+        const members = [];
+        const loc = [];
+        const jsDoc = [];
+        for (const decl of (sym.declarations as Array<ts.EnumDeclaration>)) {
+            for (const el of decl.members) {
+                const name = el.name.getText();
+                members.push({
+                    name,
+                    initializer: el.initializer && this.resolveExpressionToType(el.initializer),
+                    loc: this.getLOC(currentModule, el)
+                });
+                const elSymbol = this.extractor.checker.getSymbolAtLocation(el.name);
+                if (elSymbol) {
+                    this.extractor.refs.set(elSymbol, {
+                        name: sym.name,
+                        displayName: name,
+                        path: currentModule.path,
+                        moduleName: this.module.name,
+                        kind: TypeReferenceKinds.ENUM_MEMBER
+                    });
+                }
+            }
+            loc.push(this.getLOC(currentModule, decl));
+            const jsDocData = this.getJSDocData(decl);
+            if (jsDocData) jsDoc.push(...jsDocData);
+        }
+        currentModule.enums.push({
+            name: sym.name,
+            isConst: Boolean(firstDecl.modifiers && firstDecl.modifiers.some(mod => mod.kind === ts.SyntaxKind.ConstKeyword)),
+            loc,
+            jsDoc,
+            members
+        });
         return undefined;
     }
 
-    handleEnumDecl(_decls: Array<ts.EnumDeclaration>, _currentModule = this.getOrCreateModule(_decls[0].getSourceFile().fileName)) : ReferenceType | undefined {
-        return undefined;
-    }
-
-    handleTypeAliasDecl(_decl: ts.TypeAliasDeclaration, _currentModule = this.getOrCreateModule(_decl.getSourceFile().fileName)) : ReferenceType | undefined {
-        return undefined;
+    handleTypeAliasDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
+        const decl = sym.declarations![0] as ts.TypeAliasDeclaration;
+        if (!currentModule) currentModule = this.getOrCreateModule(decl.getSourceFile().fileName);
+        const ref = {
+            name: sym.name,
+            path: currentModule.path,
+            moduleName: this.module.name,
+            kind: TypeReferenceKinds.TYPE_ALIAS
+        };
+        this.extractor.refs.set(sym, ref);
+        currentModule.types.push({
+            name: sym.name,
+            value: this.resolveType(decl.type),
+            typeParameters: decl.typeParameters?.map(param => this.resolveTypeParameters(param)),
+            loc: this.getLOC(currentModule, decl),
+            jsDoc: this.getJSDocData(decl)
+        });
+        return ref;
     }
 
     handleNamespaceDecl(symbol: ts.Symbol, currentModule?: Module) : undefined {
@@ -283,18 +380,40 @@ export class Project {
         return;
     }
 
-    handleVariableDecl(_decl: ts.VariableDeclaration, _currentModule = this.getOrCreateModule(_decl.getSourceFile().fileName)) : ReferenceType | undefined {
+    handleVariableDecl(decl: ts.VariableDeclaration, currentModule = this.getOrCreateModule(decl.getSourceFile().fileName)) : ReferenceType | undefined {
+        const maxLen = this.extractor.settings.maxConstantTextLength || 256;
+        const text = decl.initializer && decl.initializer.getText();
+        currentModule.constants.push({
+            name: decl.name.getText(),
+            loc: this.getLOC(currentModule, decl),
+            jsDoc: this.getJSDocData(decl),
+            content: text && (text.length > maxLen) ? text.slice(0, maxLen) : text
+        });
         return undefined;
     }
 
-    handleFunctionDecl(_decl: ts.FunctionDeclaration, _currentModule = this.getOrCreateModule(_decl.getSourceFile().fileName)) : ReferenceType | undefined {
+    handleFunctionDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
+        const lastDecl = sym.declarations![sym.declarations!.length - 1];
+        if (!currentModule) currentModule = this.getOrCreateModule(lastDecl.getSourceFile().fileName);
+        const signatures = [];
+        for (const decl of (sym.declarations as Array<ts.FunctionDeclaration>)) {
+            signatures.push({
+                returnType: this.resolveReturnType(decl),
+                typeParameters: decl.typeParameters?.map(param => this.resolveTypeParameters(param)),
+                parameters: decl.parameters.map(param => this.resolveParameter(param)),
+                jsDoc: this.getJSDocData(decl)
+            });
+        }
+        currentModule.functions.push({
+            name: sym.name,
+            signatures,
+            loc: this.getLOC(currentModule, lastDecl)
+        });
         return undefined;
     }
 
-    resolveSymbol(sym?: ts.Symbol, typeArgs?: ts.NodeArray<ts.TypeNode>) : Reference|undefined {
-        if (!sym) return;
+    resolveSymbol(sym: ts.Symbol, typeArguments?: Array<Type>) : Reference {
         sym = this.resolveAliasedSymbol(sym);
-        const typeArguments = typeArgs?.map(arg => this.resolveType(arg));
         if (hasBit(sym.flags, ts.SymbolFlags.TypeParameter)) return {
             type: { name: sym.name, kind: TypeReferenceKinds.TYPE_PARAMETER },
             typeArguments,
@@ -305,17 +424,17 @@ export class Project {
             typeArguments,
             type: this.extractor.refs.get(sym)!
         } as Reference;
-        // Todo: External types
         const newlyCreated = this.handleSymbol(sym);
         if (newlyCreated) return { kind: TypeKinds.REFERENCE, typeArguments, type: newlyCreated };
-        return;
+        return { kind: TypeKinds.REFERENCE, typeArguments, type: { kind: TypeReferenceKinds.UNKNOWN, name: sym.name }};
     }
 
     resolveType(type: ts.Node) : Type {
         if (ts.isTypeReferenceNode(type)) {
-            const foundType = this.resolveSymbol(this.extractor.checker.getSymbolAtLocation(type.typeName), type.typeArguments);
-            if (!foundType) return { kind: TypeKinds.UNKNOWN };
-            return foundType;
+            const symbol = this.extractor.checker.getSymbolAtLocation(type.typeName);
+            const typeArguments = type.typeArguments?.map(arg => this.resolveType(arg));
+            if (symbol) return this.resolveSymbol(symbol, typeArguments);
+            return { kind: TypeKinds.REFERENCE, typeArguments, type: { name: type.typeName.getText(), kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN } };
         }
         else if (ts.isFunctionTypeNode(type)) {
             return {
@@ -387,9 +506,9 @@ export class Project {
         }
         else if (ts.isParenthesizedTypeNode(type)) return this.resolveType(type.type);
         else if (ts.isThisTypeNode(type)) {
-            const resolvedType = this.resolveSymbol(this.extractor.checker.getSymbolAtLocation(type));
-            if (!resolvedType) return { name: "this", kind: TypeKinds.STRINGIFIED_UNKNOWN };
-            return resolvedType;
+            const sym = this.extractor.checker.getSymbolAtLocation(type);
+            if (!sym) return { name: "this", kind: TypeKinds.STRINGIFIED_UNKNOWN };
+            return this.resolveSymbol(sym);
         }
         else if (ts.isMappedTypeNode(type)) {
             return {
@@ -463,15 +582,12 @@ export class Project {
         if (!type) return;
         const sym = type.getSymbol();
         if (!sym) return;
-        const res = this.resolveSymbol(sym);
-        if (!res) return;
         //@ts-expect-error Internal API
-        res.typeArguments = type.resolvedTypeArguments && type.resolvedTypeArguments.map(t => {
+        return this.resolveSymbol(sym, type.resolvedTypeArguments && type.resolvedTypeArguments.map(t => {
             const symbol = t.getSymbol();
             if (!symbol) return { kind: TypeKinds.ANY, name: "any" };
             return this.resolveSymbol(symbol);
-        });
-        return;
+        }));
     }
 
     resolveTypeParameters(generic: ts.TypeParameterDeclaration) : TypeParameter {
@@ -505,9 +621,8 @@ export class Project {
     }
 
     resolveHeritage(param: ts.ExpressionWithTypeArguments) : Type {
-        const sym = this.resolveSymbol(this.extractor.checker.getSymbolAtLocation(param.expression), param.typeArguments);
-        if (sym) return sym;
-        return {
+        const sym = this.extractor.checker.getSymbolAtLocation(param.expression);
+        if (!sym) return {
             type: {
                 name: param.expression.getText(),
                 kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN
@@ -515,6 +630,7 @@ export class Project {
             typeArguments: param.typeArguments?.map(arg => this.resolveType(arg)),
             kind: TypeKinds.REFERENCE
         };
+        return this.resolveSymbol(sym, param.typeArguments?.map(arg => this.resolveType(arg)));
     }
 
     resolveParameter(param: ts.ParameterDeclaration) : FunctionParameter {
@@ -530,7 +646,11 @@ export class Project {
     }
 
     resolveExpressionToType(exp: ts.Node) : Type|undefined {
-        if (ts.isNewExpression(exp)) return this.resolveSymbol(this.extractor.checker.getSymbolAtLocation(exp.expression), exp.typeArguments);
+        if (ts.isNewExpression(exp)) {
+            const expSym = this.extractor.checker.getSymbolAtLocation(exp.expression);
+            if (!expSym) return;
+            return this.resolveSymbol(expSym, exp.typeArguments?.map(arg => this.resolveType(arg)));
+        }
         const sym = this.extractor.checker.getSymbolAtLocation(exp);
         if (sym) return this.resolveSymbol(sym);
         switch (exp.kind) {
@@ -546,7 +666,11 @@ export class Project {
     }
 
     resolveAliasedSymbol(symbol: ts.Symbol) : ts.Symbol {
-        while (hasBit(symbol.flags, ts.SymbolFlags.Alias)) symbol = this.extractor.checker.getAliasedSymbol(symbol);
+        while (hasBit(symbol.flags, ts.SymbolFlags.Alias)) {
+            const newSym = this.extractor.checker.getAliasedSymbol(symbol);
+            if (newSym.name === "unknown") return symbol;
+            symbol = newSym;
+        }
         return symbol;
     }
 
