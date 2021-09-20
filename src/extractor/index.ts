@@ -5,14 +5,15 @@ import ts from "typescript";
 import { findPackageJSON, PackageJSON, removePartOfEndOfPath } from "../utils";
 import { createHost } from "./Host";
 import { Project } from "./Project";
-import { ReferenceManager } from "./ReferenceManager";
+import { ExternalReference, ReferenceManager } from "./ReferenceManager";
 
 
 export interface TypescriptExtractorSettings {
     entryPoints: Array<string>,
     ignoreModuleNames?: Array<string>,
     ignoreFolderNames?: Array<string>,
-    maxConstantTextLength?: number
+    maxConstantTextLength?: number,
+    externals?: Array<ExternalReference>
 }
 
 export class TypescriptExtractor {
@@ -22,7 +23,7 @@ export class TypescriptExtractor {
     refs: ReferenceManager
     constructor(settings: TypescriptExtractorSettings) {
         this.settings = settings;
-        this.refs = new ReferenceManager();
+        this.refs = new ReferenceManager(settings.externals);
     }
 
     run() : Array<Project> {

@@ -107,7 +107,7 @@ export class Project {
         else if (hasBit(val.flags, ts.SymbolFlags.Enum)) return this.handleEnumDecl(val, currentModule);
         else if (hasBit(val.flags, ts.SymbolFlags.TypeAlias)) return this.handleTypeAliasDecl(val, currentModule);
         else if (hasBit(val.flags, ts.SymbolFlags.Module)) return this.handleNamespaceDecl(val, currentModule);
-        else if (hasBit(val.flags, ts.SymbolFlags.Variable)) return this.handleVariableDecl(val.declarations[0] as ts.VariableDeclaration, currentModule);
+        else if (hasBit(val.flags, ts.SymbolFlags.Variable)) return this.handleVariableDecl(val, currentModule);
         else if (hasBit(val.flags, ts.SymbolFlags.Function)) return this.handleFunctionDecl(val, currentModule);
         else if (hasBit(val.flags, ts.SymbolFlags.EnumMember)) {
             //@ts-expect-error Private property
@@ -121,7 +121,17 @@ export class Project {
                 return;
             }
             if (this.extractor.refs.has(aliased)) return this.extractor.refs.get(aliased);
-            //console.log(val.name, aliased.name, this.extractor.refs.has(aliased));
+            if (aliased.declarations && aliased.declarations.length) {
+                const decl = aliased.declarations![0];
+                let name: ts.Symbol|string = aliased;
+                let importedFrom;
+                if (ts.isImportClause(decl)) importedFrom = (decl.parent.moduleSpecifier as ts.StringLiteral).text;
+                else if (ts.isImportSpecifier(decl)) {
+                    importedFrom = (decl.parent.parent.parent.moduleSpecifier as ts.StringLiteral).text;
+                    if (decl.propertyName) name = decl.propertyName.text;
+                }
+                if (importedFrom) return this.extractor.refs.findExternal(name, importedFrom);
+            }
             return;
         }
     }
@@ -380,7 +390,16 @@ export class Project {
         return;
     }
 
-    handleVariableDecl(decl: ts.VariableDeclaration, currentModule = this.getOrCreateModule(decl.getSourceFile().fileName)) : ReferenceType | undefined {
+    handleVariableDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
+        const decl = sym.declarations![0] as ts.VariableDeclaration;
+        if (!currentModule) currentModule = this.getOrCreateModule(decl.getSourceFile().fileName);
+        const ref = {
+            name: sym.name,
+            kind: TypeReferenceKinds.CONSTANT,
+            path: currentModule.path,
+            moduleName: this.module.name
+        };
+        this.extractor.refs.set(sym, ref);
         const maxLen = this.extractor.settings.maxConstantTextLength || 256;
         const text = decl.initializer && decl.initializer.getText();
         currentModule.constants.push({
@@ -389,12 +408,19 @@ export class Project {
             jsDoc: this.getJSDocData(decl),
             content: text && (text.length > maxLen) ? text.slice(0, maxLen) : text
         });
-        return undefined;
+        return ref;
     }
 
     handleFunctionDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
         const lastDecl = sym.declarations![sym.declarations!.length - 1];
         if (!currentModule) currentModule = this.getOrCreateModule(lastDecl.getSourceFile().fileName);
+        const ref = {
+            name: sym.name,
+            path: currentModule.path,
+            moduleName: this.module.name,
+            kind: TypeReferenceKinds.FUNCTION
+        };
+        this.extractor.refs.set(sym, ref);
         const signatures = [];
         for (const decl of (sym.declarations as Array<ts.FunctionDeclaration>)) {
             signatures.push({
@@ -409,7 +435,7 @@ export class Project {
             signatures,
             loc: this.getLOC(currentModule, lastDecl)
         });
-        return undefined;
+        return ref;
     }
 
     resolveSymbol(sym: ts.Symbol, typeArguments?: Array<Type>) : Reference {
@@ -434,6 +460,12 @@ export class Project {
             const symbol = this.extractor.checker.getSymbolAtLocation(type.typeName);
             const typeArguments = type.typeArguments?.map(arg => this.resolveType(arg));
             if (symbol) return this.resolveSymbol(symbol, typeArguments);
+            const externalMaybe = this.extractor.refs.findUnnamedExternal(type.typeName.getText());
+            if (externalMaybe) return {
+                kind: TypeKinds.REFERENCE,
+                typeArguments,
+                type: externalMaybe
+            };
             return { kind: TypeKinds.REFERENCE, typeArguments, type: { name: type.typeName.getText(), kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN } };
         }
         else if (ts.isFunctionTypeNode(type)) {

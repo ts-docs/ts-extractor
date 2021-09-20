@@ -121,7 +121,8 @@ export const enum TypeReferenceKinds {
     UNKNOWN,
     STRINGIFIED_UNKNOWN,
     ENUM_MEMBER,
-    NAMESPACE_OR_MODULE
+    NAMESPACE_OR_MODULE,
+    EXTERNAL
 }
 
 /**
