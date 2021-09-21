@@ -10,7 +10,6 @@ import { ExternalReference, ReferenceManager } from "./ReferenceManager";
 
 export interface TypescriptExtractorSettings {
     entryPoints: Array<string>,
-    ignoreModuleNames?: Array<string>,
     ignoreFolderNames?: Array<string>,
     maxConstantTextLength?: number,
     externals?: Array<ExternalReference>
