@@ -1,5 +1,19 @@
 import ts from "typescript";
 
+
+/**
+ * If the `references` property is an empty array, then everything (*) is exported from the module.
+ */
+export interface ModuleExport {
+    module: ReferenceType,
+    alias?: string,
+    references: Array<ReferenceType>
+}
+
+export interface AliasedReference extends ReferenceType {
+    alias?: string
+}
+
 export interface Module {
     name: string,
     modules: Map<string, Module>,
@@ -12,10 +26,8 @@ export interface Module {
     repository?: string,
     isGlobal?: boolean,
     isNamespace?: boolean,
-    reExports?: Array<{
-        exports: Array<string>,
-        location: string
-    }>
+    reExports: Array<ModuleExport>,
+    exports: Array<AliasedReference>,
     path: Array<string>
 }
 
@@ -66,10 +78,15 @@ export function createModule(name: string, path: Array<string>, isGlobal?: boole
         enums: [],
         constants: [],
         reExports: [],
+        exports: [],
         isGlobal,
         isNamespace,
         path
     };
+}
+
+export function createModuleRef(mod: Module) : ReferenceType {
+    return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, path: mod.path, moduleName: mod.name, name: mod.name }; 
 }
 
 export const enum TypeKinds {

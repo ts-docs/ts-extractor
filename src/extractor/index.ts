@@ -60,7 +60,7 @@ export class TypescriptExtractor {
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
             const project = new Project({folderPath: removePartOfEndOfPath(sourceFile.fileName, base), extractor: this, packageJSON: packageJSONs.get(entryPoint)! });
             projects.push(project);
-            project.visitor(sourceFile);
+            project.visitor(sourceFile, project.module, true);
         }
         return projects;
     }

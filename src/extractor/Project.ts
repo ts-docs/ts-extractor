@@ -3,7 +3,7 @@ import path from "path";
 import ts from "typescript";
 import { TypescriptExtractor } from ".";
 import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON } from "../utils";
-import { ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, FunctionParameter, IndexSignatureDeclaration, JSDocData, JSDocTag, Loc, Module, ObjectLiteral, Property, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
+import { AliasedReference, ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, createModuleRef, FunctionParameter, IndexSignatureDeclaration, JSDocData, JSDocTag, Loc, Module, ModuleExport, ObjectLiteral, Property, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
 
 /**
  * Here's how the module structure works:
@@ -22,6 +22,8 @@ export class Project {
     baseDir: string
     private moduleCache: Record<string, Module>
     private fileCache: Set<string>
+    private fileExportsCache: Record<string, [Array<ReferenceType>, Array<ModuleExport>]>
+    private ignoreNamespaceMembers?: boolean
     constructor({folderPath, extractor, packageJSON}: {
         folderPath: Array<string>, 
         extractor: TypescriptExtractor
@@ -37,39 +39,93 @@ export class Project {
         this.extractor = extractor;
         this.moduleCache = {};
         this.fileCache = new Set();
+        this.fileExportsCache = {};
     }
 
-    visitor(sourceFile: ts.SourceFile|ts.Symbol) : void {
+    visitor(sourceFile: ts.SourceFile|ts.Symbol, currentModule?: Module, addToExports = false) : void {
         let sym;
         if ("fileName" in sourceFile) sym = this.extractor.checker.getSymbolAtLocation(sourceFile);
         else sym = sourceFile;
         if (!sym || !sym.exports) return;
         if (this.fileCache.has(sym.name)) return;
         this.fileCache.add(sym.name);
+        if (!currentModule) currentModule = this.getOrCreateModule(sym.name);
+        const reExports: Record<string, ModuleExport> = {};
+        const exports: Array<AliasedReference> = [];
         // @ts-expect-error You should be able to do that
         for (const [, val] of sym.exports) {
-            // export * from "..."
+            // export * from "..." - goes to "exports"
             if (val.name === "__export") {
                 for (const decl of val.declarations!) {
                     if (ts.isExportDeclaration(decl) && decl.moduleSpecifier && ts.isStringLiteral(decl.moduleSpecifier)) {
                         const reExportedFile = this.resolveSourceFile(decl.getSourceFile().fileName, decl.moduleSpecifier.text);
                         if (!reExportedFile) continue;
-                        this.visitor(reExportedFile);
+                        const mod = this.getOrCreateModule(reExportedFile.fileName);
+                        if (mod !== currentModule) {
+                            if (!reExports[mod.name]) reExports[mod.name] = {references: [], module: createModuleRef(mod) };
+                            this.visitor(reExportedFile, mod);
+                        } else this.visitor(reExportedFile, mod, true);
                     }
                 } 
             } else if (val.declarations && val.declarations.length) {
                 // export { ... } from "...";
                 // import { ... } from "..."; export { ... };
+                // If the module is different, goes to "reExports", otherwise "exports"
                 if (ts.isExportSpecifier(val.declarations[0])) {
                     const aliased = this.resolveAliasedSymbol(val);
                     if (!aliased.declarations || !aliased.declarations.length) continue;
-                    this.visitor(aliased.declarations![0].getSourceFile());
+                    const source = aliased.declarations![0].getSourceFile();
+                    const mod = this.getOrCreateModule(source.fileName);
+                    this.visitor(source, mod);
+                    const alias = val.name !== aliased.name ? val.name : undefined;
+                    if (mod !== currentModule) {
+                        if (!reExports[mod.name]) {
+                            const references = [];
+                            if (this.extractor.refs.has(aliased)) references.push(this.extractor.refs.get(aliased)!);
+                            reExports[mod.name] = { module: createModuleRef(mod), references, alias };
+                        } else {
+                            if (!this.extractor.refs.has(aliased)) continue;
+                            reExports[mod.name].references.push(this.extractor.refs.get(aliased)!);
+                        }
+                    } else {
+                        const aliasedRef = this.extractor.refs.get(aliased);
+                        const reExportsOfMod = this.fileExportsCache[aliased.name];
+                        if (!reExportsOfMod) continue;
+                        if (!aliasedRef) reExports[val.name] = { alias: val.name, module: createModuleRef(mod), references: reExportsOfMod[0] };
+                        else exports.push({ ...aliasedRef, alias });
+                    }
+                } 
+                // export * as X from "...";
+                // Always goes to "reExports"
+                else if (ts.isNamespaceExport(val.declarations[0])) {
+                    const namespaceName = val.declarations[0].name.text;
+                    const aliased = this.resolveAliasedSymbol(val);
+                    if (!aliased.declarations || !aliased.declarations.length) continue;
+                    const mod = this.getOrCreateModule(aliased.name);
+                    this.visitor(aliased, mod);
+                    const exportsFromMod = this.fileExportsCache[aliased.name];
+                    if (!exportsFromMod) continue;
+                    reExports[aliased.name] = {
+                        alias: namespaceName,
+                        module: createModuleRef(mod),
+                        references: exportsFromMod[0]
+                    };
                 }
                 // export ...
-                else this.handleSymbol(val);
+                // Always go to "exports"
+                else {
+                    const sym = this.handleSymbol(val, currentModule);
+                    if (sym) exports.push(sym);
+                }
             }
         }
-
+        const reExportsArr = Object.values(reExports);
+        this.fileExportsCache[sym.name] = [exports, reExportsArr];
+        if (addToExports) {
+            currentModule.exports.push(...exports);
+            currentModule.reExports.push(...reExportsArr);
+        }
+        return;
     }
 
     getOrCreateModule(source: string) : Module {
@@ -105,13 +161,13 @@ export class Project {
         return undefined;
     }
 
-    handleSymbol(val: ts.Symbol, currentModule?: Module, ignoreNamespaces?: boolean) : ReferenceType | undefined {
+    handleSymbol(val: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
         if (!val.declarations || !val.declarations.length) return;
         if (this.extractor.refs.has(val)) return this.extractor.refs.get(val);
-        if (!ignoreNamespaces && ts.isModuleBlock(val.declarations[0].parent)) {
+        if (!this.ignoreNamespaceMembers && ts.isModuleBlock(val.declarations[0].parent)) {
             const namespaceSym = this.extractor.checker.getSymbolAtLocation(val.declarations[0].parent.parent.name);
             if (namespaceSym) {
-                this.handleNamespaceDecl(namespaceSym);
+                if (!this.extractor.refs.has(namespaceSym)) this.handleNamespaceDecl(namespaceSym);
                 return this.extractor.refs.get(val);
             }
         }
@@ -125,7 +181,8 @@ export class Project {
         else if (hasBit(val.flags, ts.SymbolFlags.Function)) return this.handleFunctionDecl(val, currentModule);
         else if (hasBit(val.flags, ts.SymbolFlags.EnumMember)) {
             //@ts-expect-error Private property
-            this.handleEnumDecl(val.parent, currentModule);
+            const parent = val.parent;
+            if (!this.extractor.refs.has(parent)) this.handleEnumDecl(parent, currentModule);
             return this.extractor.refs.get(val);
         }
         else {
@@ -382,22 +439,28 @@ export class Project {
         return ref;
     }
 
-    handleNamespaceDecl(symbol: ts.Symbol, currentModule?: Module) : undefined {
+    handleNamespaceDecl(symbol: ts.Symbol, currentModule?: Module) : ReferenceType|undefined {
         const firstDecl = symbol.declarations![0]! as ts.ModuleDeclaration;
         if (!currentModule) currentModule = this.getOrCreateModule(firstDecl.getSourceFile().fileName);
         const newMod = createModule(firstDecl.name.text, [...currentModule.path, firstDecl.name.text], false, undefined, true);
         const namespaceLoc = this.getLOC(newMod, firstDecl);
         newMod.repository = namespaceLoc.sourceFile;
         currentModule.modules.set(newMod.name, newMod);
-        for (const decl of (symbol.declarations as Array<ts.ModuleDeclaration>)) {
-            if (!decl.body || !ts.isModuleBlock(decl.body)) continue;
-            for (const element of decl.body.statements) {
-                //@ts-expect-error Every namespace member has a name
-                const sym = this.extractor.checker.getSymbolAtLocation(element.name);
-                if (sym) this.handleSymbol(sym, newMod, true);
-            }
+        const ref = {
+            name: symbol.name,
+            path: currentModule.path,
+            moduleName: this.module.name,
+            kind: TypeReferenceKinds.NAMESPACE_OR_MODULE
+        };
+        this.extractor.refs.set(symbol, ref);
+        this.ignoreNamespaceMembers = true;
+        // @ts-expect-error You should be able to do that
+        for (const [, element] of symbol.exports) {
+            const sym = this.handleSymbol(element, newMod);
+            if (sym) newMod.exports.push(sym);
         }
-        return;
+        this.ignoreNamespaceMembers = false;
+        return ref;
     }
 
     handleVariableDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
