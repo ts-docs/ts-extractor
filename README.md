@@ -20,25 +20,55 @@ Check out the documentation [here](https://ts-docs.github.io/ts-docs/m.extractor
 
 ```npm i @ts-docs/extractor```
 
-## Examples
+## 2.0 changes
 
-Check out some examples [here](https://github.com/ts-docs/ts-extractor/tree/main/examples)
+This version is faster and gathers way more accurate information.
+
+### Completely different API
+
+```ts
+// Before
+import { extract } from "...";
+const [modules, tsConfig] = extract(["./entry-point.ts"]);
+
+// Now
+import { TypescriptExtractor } from "...";
+const extractor = new TypescriptExtractor({
+    entryPoints: ["./entry-point.ts"],
+    externals: [],
+    maxConstantTextLength: 1024,
+    ignoreFolderNames: []
+});
+const projects = extractor.run();
+```
+
+### `ReferenceType#moduleName` instead of `ReferenceType#external`
+
+All references now have a `moduleName` which is the name of the global module they're from. 
+
+### `GlobalModule#exports` and `GlobalModule#reExports`
+
+Extracts all exports and re-exports from the entry points.
+
+## Examples
 
 ### External References
 
-Let's assume you have some module which uses `node-fetch` and some of it's types.
+Let's assume you have some module which uses `node-fetch` and some of it's types. Supply the `externals` option in the extractor settings:
 
 ```ts
-extract(["./entry-point"], [
-    {
-        name: "node-fetch",
-        resolver: (name) => {
-            // "name" is the name of the reference
-            switch(name) {
-                case "Response": return "https://github.com/node-fetch/node-fetch#class-response";
-                case "Request": return "https://github.com/node-fetch/node-fetch#class-request";
+const extractor = new TypescriptExtractor({ 
+    entryPoints: ["./entry-point.ts"],
+    externals: [
+        {
+            run: (name) => {
+                name = name.name || name; // name can either be a symbol or a string
+                switch (name) {
+                    case "Response": return "https://github.com/node-fetch/node-fetch#class-response";
+                    case "Request": return "https://github.com/node-fetch/node-fetch#class-request";
+                }
             }
         }
-    }
-]);
+    ]
+})
 ```
