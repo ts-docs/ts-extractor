@@ -39,7 +39,8 @@ export function getRepository(packageJSON: PackageJSON) : string|undefined {
     } else {
         const {type, url} = repository;
         const branch = getBranchName(packageJSON.path);
-        return `${url.replace(new RegExp(`${type}\\+|\\.${type}|${type}:`, "g"), "")}/tree/${branch}${repository.directory || ""}`;
+        // eslint-disable-next-line no-useless-escape
+        return `${url.replace(new RegExp(`${type}\\+|\\.${type}|${type}:\/\/`, "g"), "")}/tree/${branch}${repository.directory || ""}`;
     }
 }
 
