@@ -5,13 +5,6 @@ import { TypescriptExtractor } from ".";
 import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON } from "../utils";
 import { AliasedReference, ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, createModuleRef, FunctionParameter, IndexSignatureDeclaration, JSDocData, JSDocTag, Loc, Module, ModuleExport, ObjectLiteral, Property, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
 
-/**
- * Here's how the module structure works:
- * 
- * Every folder is considered a **module**, every defined thing in that folder is part of that module.
- * Inner-folders are inner-modules of that module, same with namespaces.
- */
-
 export class Project {
     repository?: string
     readme?: string
@@ -121,7 +114,7 @@ export class Project {
         }
         const reExportsArr = Object.values(reExports);
         this.fileExportsCache[sym.name] = [exports, reExportsArr];
-        if (addToExports) {
+        if (addToExports || sym.name.endsWith("index\"")) {
             currentModule.exports.push(...exports);
             currentModule.reExports.push(...reExportsArr);
         }
@@ -349,7 +342,10 @@ export class Project {
         const loc = [];
         const jsDoc = [];
         for (const decl of (sym.declarations as Array<ts.InterfaceDeclaration>)) {
-            for (const member of (decl.members || [])) properties.push(this.resolveProperty(member));
+            for (const member of (decl.members || [])) properties.push({
+                value: this.resolveProperty(member),
+                jsDoc: this.getJSDocData(member)
+            });
             loc.push(this.getLOC(currentModule, decl));
             const jsdoc = this.getJSDocData(decl);
             if (jsdoc) jsDoc.push(...jsdoc);
@@ -392,7 +388,8 @@ export class Project {
                 members.push({
                     name,
                     initializer: el.initializer && this.resolveExpressionToType(el.initializer),
-                    loc: this.getLOC(currentModule, el)
+                    loc: this.getLOC(currentModule, el),
+                    jsDoc: this.getJSDocData(el)
                 });
                 const elSymbol = this.extractor.checker.getSymbolAtLocation(el.name);
                 if (elSymbol) {

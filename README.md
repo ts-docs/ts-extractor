@@ -46,9 +46,19 @@ const projects = extractor.run();
 
 All references now have a `moduleName` which is the name of the global module they're from. 
 
-### `GlobalModule#exports` and `GlobalModule#reExports`
+### `Module#exports` and `Module#reExports`
 
-Extracts all exports and re-exports from the entry points.
+Extracts all exports and re-exports from every modules' entry point. If a module doesn't have an entry point (`index.ts`) then the arrays will be empty.
+
+### `InterfaceDecl#properties`
+
+Is now an array of objects like this:
+```js
+{
+    value: Property|IndexSignature|ArrowFunction,
+    jsDoc: JSDocData
+}
+```
 
 ## Examples
 

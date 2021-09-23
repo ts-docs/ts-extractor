@@ -56,3 +56,21 @@ export function getReadme(dir: string) : string|undefined {
 export function hasBit(num: number, bit: number) : boolean {
     return (num & bit) !== 0;
 }
+
+
+export interface ProjectMetadata {
+    readme?: string,
+    homepage?: string,
+    version?: string,
+    repository?: string
+}
+
+export function extractMetadata(directory: string) : ProjectMetadata {
+    const packageJSON = findPackageJSON(directory);
+    return {
+        readme: getReadme(directory),
+        homepage: packageJSON && packageJSON.contents.homepage,
+        version: packageJSON && packageJSON.contents.version,
+        repository: packageJSON && getRepository(packageJSON)
+    };
+}

@@ -1,15 +1,18 @@
 
 import ts from "typescript";
 import { Project } from "./Project";
-import { ReferenceType, TypeReferenceKinds } from "./structure";
+import { Module, ReferenceType, TypeReferenceKinds } from "./structure";
 
-/**
- * The symbol parameter is usually a string when the reference is global, or when the import is aliased (`import {A as B} from "..."`)
- * 
- * The source is undefined only when the thing is not imported, which means it's a global object. (Array, Promise, etc.)
- */
 export interface ExternalReference {
+    /**
+     * The symbol parameter is usually a string when the reference is global, or when the import is aliased (`import {A as B} from "..."`)
+     * The source is undefined only when the thing is not imported, which means it's a global object. (Array, Promise, etc.)
+     */
     run: (symbol: ts.Symbol|string, source?: string) => {link: string, displayName?: string, name?: string}|undefined,
+    /**
+     * If this property is provided to the reference manager, it's going to parse the import module name and if the first part of it matches the baseName, the 
+     * run function will be called.
+     */
     baseName?: string
 }
 
@@ -69,6 +72,22 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
             if (module.modules.has(name)) return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, name, path, moduleName: project.module.name };
             return;
         });
+    }
+
+    findByPath(name: string, path: Array<string>, project: Project) : ReferenceType|undefined {
+        let mod: Module|undefined = project.module;
+        for (const pathPart of path) {
+            mod = mod.modules.get(pathPart);
+            if (!mod) return;
+        }
+        if (mod.classes.some(cl => cl.name === name)) return { kind: TypeReferenceKinds.CLASS, name, path, moduleName: project.module.name };
+        if (mod.interfaces.some(int => int.name === name)) return { kind: TypeReferenceKinds.INTERFACE, name, path, moduleName: project.module.name };
+        if (mod.enums.some(en => en.name === name)) return { kind: TypeReferenceKinds.ENUM, name, path, moduleName: project.module.name };
+        if (mod.types.some(ty => ty.name === name)) return { kind: TypeReferenceKinds.TYPE_ALIAS, name, path, moduleName: project.module.name };
+        if (mod.functions.some(fn => fn.name === name)) return { kind: TypeReferenceKinds.FUNCTION, name, path, moduleName: project.module.name };
+        if (mod.constants.some(c => c.name === name)) return { kind: TypeReferenceKinds.FUNCTION, name, path, moduleName: project.module.name };
+        if (mod.modules.has(name)) return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, name, path, moduleName: project.module.name };
+        return;
     }
 
 }

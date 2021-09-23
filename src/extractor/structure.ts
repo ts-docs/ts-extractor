@@ -171,6 +171,9 @@ export interface Reference extends BaseType {
 
 export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType | TypePredicateType | InferType;
 
+/**
+ * `string`, `number`, `boolean`, etc.
+ */
 export interface Literal extends BaseType {
     name: string
 }
@@ -236,45 +239,72 @@ export interface FunctionDecl extends Node {
     signatures: Array<FunctionSignature>
 }
 
-// (...parameters) => returnValue
+/**
+ * `(...parameters) => returnValue`
+ */
 export interface ArrowFunction extends BaseType {
     typeParameters?: Array<TypeParameter>,
     returnType?: Type,
     parameters?: Array<FunctionParameter>
 }
 
+/**
+ * `[key: string]: type`
+ * 
+ * `key` is the type of the key, `type` is the type of the value.
+ */
 export interface IndexSignatureDeclaration {
     key?: Type,
     type: Type
 }
 
-// { a: type }
+/**
+ * `{ someProperty: type }`
+ */
 export interface ObjectLiteral extends BaseType {
     properties: Array<Property|IndexSignatureDeclaration>,
 }
 
-// a | b , a & b
+/**
+ * `a | b` or `a & b`
+ */
 export interface UnionOrIntersection extends BaseType {
     types: Array<Type>
 }
 
-// keyof a, unqiue a, readonly a, typeof a
+/**
+ * ```ts
+ * keyof a
+ * unqiue a
+ * readonly a
+ * typeof a
+ * ```
+ */
 export interface TypeOperator extends BaseType {
     type: Type
 }
 
-// [a, b, c]
+/**
+ * `[a, b, c]`
+ */
 export interface Tuple extends BaseType {
     types: Array<Type>,
 }
 
-// a[]
+/**
+ * `a[]`
+ */
 export interface ArrayType extends BaseType {
     type: Type
 }
 
+export interface InterfaceProperty {
+    value: Property|IndexSignatureDeclaration|ArrowFunction,
+    jsDoc?: Array<JSDocData>
+}
+
 export interface InterfaceDecl extends NodeWithManyLOC {
-    properties: Array<Property|IndexSignatureDeclaration|ArrowFunction>,
+    properties: Array<InterfaceProperty>,
     typeParameters?: Array<TypeParameter>
     extends?: Array<Type>,
     implements?: Array<Type>
@@ -299,6 +329,13 @@ export interface EnumDecl extends NodeWithManyLOC {
     isConst: boolean
 }
 
+/**
+ * ```ts
+ * type OptionsFlags<Type> = {
+ * [Property in keyof Type]: boolean;
+ * };
+ * ```
+ */
 export interface MappedType extends BaseType {
     typeParameter: string,
     constraint?: Type,
@@ -306,6 +343,11 @@ export interface MappedType extends BaseType {
     type?: Type
 }
 
+/**
+ * ```ts
+ * a extends b ? number : string;
+ * ```
+ */
 export interface ConditionalType extends BaseType {
     checkType: Type,
     extendsType: Type,
@@ -313,11 +355,23 @@ export interface ConditionalType extends BaseType {
     falseType: Type
 }
 
+/**
+ * ```ts
+ * type World = "world";
+ * type Greeting = `hello ${World}`;
+ * ```
+ */
 export interface TemplateLiteralType extends BaseType {
     head: string,
     spans: Array<{type: Type, text: string}>
 }
 
+/**
+ * ```ts
+ * type Person = { age: number; name: string; alive: boolean };
+ * type Age = Person["age"];
+ * ```
+ */
 export interface IndexAccessedType extends BaseType {
     object: Type,
     index: Type
