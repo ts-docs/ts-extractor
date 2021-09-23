@@ -13,7 +13,6 @@ export class Project {
     module: Module
     extractor: TypescriptExtractor
     baseDir: string
-    private moduleCache: Record<string, Module>
     private fileCache: Set<string>
     private fileExportsCache: Record<string, [Array<ReferenceType>, Array<ModuleExport>]>
     private ignoreNamespaceMembers?: boolean
@@ -30,7 +29,6 @@ export class Project {
         this.readme = getReadme(packageJSON.path);
         this.module = createModule(packageJSON.contents.name, [], true, this.repository && `${this.repository}/${this.baseDir}`, false);
         this.extractor = extractor;
-        this.moduleCache = {};
         this.fileCache = new Set();
         this.fileExportsCache = {};
     }
@@ -55,7 +53,7 @@ export class Project {
                         if (!reExportedFile) continue;
                         const mod = this.getOrCreateModule(reExportedFile.fileName);
                         if (mod !== currentModule) {
-                            if (!reExports[mod.name]) reExports[mod.name] = {references: [], module: createModuleRef(mod) };
+                            if (!reExports[mod.name]) reExports[mod.name] = {references: [], module: createModuleRef(mod, this) };
                             this.visitor(reExportedFile, mod);
                         } else this.visitor(reExportedFile, mod, true);
                     }
@@ -75,16 +73,16 @@ export class Project {
                         if (!reExports[mod.name]) {
                             const references = [];
                             if (this.extractor.refs.has(aliased)) references.push(this.extractor.refs.get(aliased)!);
-                            reExports[mod.name] = { module: createModuleRef(mod), references, alias };
-                        } else {
-                            if (!this.extractor.refs.has(aliased)) continue;
-                            reExports[mod.name].references.push(this.extractor.refs.get(aliased)!);
-                        }
+                            reExports[mod.name] = { module: createModuleRef(mod, this), references, alias };
+                        } else if (this.extractor.refs.has(aliased)) reExports[mod.name].references.push({...this.extractor.refs.get(aliased)!, alias });
                     } else {
                         const aliasedRef = this.extractor.refs.get(aliased);
                         const reExportsOfMod = this.fileExportsCache[aliased.name];
                         if (!reExportsOfMod) continue;
-                        if (!aliasedRef) reExports[val.name] = { alias: val.name, module: createModuleRef(mod), references: reExportsOfMod[0] };
+                        if (!aliasedRef) {
+                            const newMod = this.getOrCreateModule(aliased.name.replace(/"/g, ""));
+                            reExports[val.name] = { alias, module: createModuleRef(newMod, this), references: reExportsOfMod[0] };
+                        }
                         else exports.push({ ...aliasedRef, alias });
                     }
                 } 
@@ -100,7 +98,7 @@ export class Project {
                     if (!exportsFromMod) continue;
                     reExports[aliased.name] = {
                         alias: namespaceName,
-                        module: createModuleRef(mod),
+                        module: createModuleRef(mod, this),
                         references: exportsFromMod[0]
                     };
                 }
@@ -123,11 +121,11 @@ export class Project {
 
     getOrCreateModule(source: string) : Module {
         const {dir} = path.parse(source);
-        if (this.moduleCache[dir]) return this.moduleCache[dir];
+        if (this.extractor.moduleCache[dir]) return this.extractor.moduleCache[dir];
         let paths = dir.split("/");
         paths = paths.slice(paths.indexOf(this.baseDir) + 1);
         if (!paths.length) {
-            this.moduleCache[dir] = this.module;
+            this.extractor.moduleCache[dir] = this.module;
             return this.module;
         }
         let lastModule = this.module;
@@ -140,7 +138,7 @@ export class Project {
             } 
             else lastModule = newMod;
         }
-        this.moduleCache[dir] = lastModule;
+        this.extractor.moduleCache[dir] = lastModule;
         return lastModule;
     }
 

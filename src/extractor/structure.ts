@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { Project } from ".";
 
 
 /**
@@ -7,7 +8,7 @@ import ts from "typescript";
 export interface ModuleExport {
     module: ReferenceType,
     alias?: string,
-    references: Array<ReferenceType>
+    references: Array<AliasedReference>
 }
 
 export interface AliasedReference extends ReferenceType {
@@ -85,8 +86,8 @@ export function createModule(name: string, path: Array<string>, isGlobal?: boole
     };
 }
 
-export function createModuleRef(mod: Module) : ReferenceType {
-    return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, path: mod.path, moduleName: mod.name, name: mod.name }; 
+export function createModuleRef(mod: Module, project: Project) : ReferenceType {
+    return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, path: mod.path, moduleName: project.module.name, name: mod.name }; 
 }
 
 export const enum TypeKinds {

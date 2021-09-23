@@ -6,6 +6,7 @@ import { findPackageJSON, PackageJSON, removePartOfEndOfPath } from "../utils";
 import { createHost } from "./Host";
 import { Project } from "./Project";
 import { ExternalReference, ReferenceManager } from "./ReferenceManager";
+import { Module } from "./structure";
 
 
 export interface TypescriptExtractorSettings {
@@ -20,9 +21,11 @@ export class TypescriptExtractor {
     checker!: ts.TypeChecker
     program!: ts.Program
     refs: ReferenceManager
+    moduleCache: Record<string, Module>
     constructor(settings: TypescriptExtractorSettings) {
         this.settings = settings;
         this.refs = new ReferenceManager(settings.externals);
+        this.moduleCache = {};
     }
 
     run() : Array<Project> {
