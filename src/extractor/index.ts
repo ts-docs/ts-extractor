@@ -65,3 +65,8 @@ export class TypescriptExtractor {
         return projects;
     }
 }
+
+export * from "./Host";
+export * from "./Project";
+export * from "./ReferenceManager";
+export * from "./structure";
