@@ -63,13 +63,13 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
 
     findByNameWithModule(name: string, project: Project) : ReferenceType|undefined {
         return project.forEachModule<ReferenceType>(project.module, (module, path) => {
-            if (module.classes.some(cl => cl.name === name)) return { kind: TypeReferenceKinds.CLASS, name, path, moduleName: project.module.name };
-            if (module.interfaces.some(int => int.name === name)) return { kind: TypeReferenceKinds.INTERFACE, name, path, moduleName: project.module.name };
-            if (module.enums.some(en => en.name === name)) return { kind: TypeReferenceKinds.ENUM, name, path, moduleName: project.module.name };
-            if (module.types.some(ty => ty.name === name)) return { kind: TypeReferenceKinds.TYPE_ALIAS, name, path, moduleName: project.module.name };
-            if (module.functions.some(fn => fn.name === name)) return { kind: TypeReferenceKinds.FUNCTION, name, path, moduleName: project.module.name };
-            if (module.constants.some(c => c.name === name)) return { kind: TypeReferenceKinds.FUNCTION, name, path, moduleName: project.module.name };
-            if (module.modules.has(name)) return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, name, path, moduleName: project.module.name };
+            if (module.classes.some(cl => cl.name === name)) return { kind: TypeReferenceKinds.CLASS, name, path };
+            if (module.interfaces.some(int => int.name === name)) return { kind: TypeReferenceKinds.INTERFACE, name, path };
+            if (module.enums.some(en => en.name === name)) return { kind: TypeReferenceKinds.ENUM, name, path };
+            if (module.types.some(ty => ty.name === name)) return { kind: TypeReferenceKinds.TYPE_ALIAS, name, path };
+            if (module.functions.some(fn => fn.name === name)) return { kind: TypeReferenceKinds.FUNCTION, name, path };
+            if (module.constants.some(c => c.name === name)) return { kind: TypeReferenceKinds.FUNCTION, name, path };
+            if (module.modules.has(name)) return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, name, path };
             return;
         });
     }

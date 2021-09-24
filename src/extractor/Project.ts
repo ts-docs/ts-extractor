@@ -142,7 +142,7 @@ export class Project {
         return lastModule;
     }
 
-    forEachModule<R>(module = this.module, cb: (module: Module, path: Array<string>) => R|undefined, pathToMod: Array<string> = []) : R|undefined {
+    forEachModule<R>(module = this.module, cb: (module: Module, path: Array<string>) => R|undefined, pathToMod: Array<string> = [module.name]) : R|undefined {
         const firstCb = cb(module, pathToMod);
         if (firstCb) return firstCb;
         for (const [, mod] of module.modules) {
