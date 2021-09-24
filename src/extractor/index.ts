@@ -10,10 +10,26 @@ import { Module } from "./structure";
 
 
 export interface TypescriptExtractorSettings {
+    /**
+     * The entry points to all projects. Every project should have only one entry point.
+     */
     entryPoints: Array<string>,
+    /**
+     * Ignored folder names for module resolution
+     */
     ignoreFolderNames?: Array<string>,
+    /**
+     * The max textlength of the value of a variable. Default is `256`
+     */
     maxConstantTextLength?: number,
-    externals?: Array<ExternalReference>
+    /**
+     * Array of external reference resolvers.
+     */
+    externals?: Array<ExternalReference>,
+    /**
+     * Any folder names in the provided array will be ignored - they won't become modules, items inside them will be inside the parent module.
+     */
+    passthroughModules?: Array<string>
 }
 
 export class TypescriptExtractor {

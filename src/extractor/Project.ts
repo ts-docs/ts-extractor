@@ -29,7 +29,6 @@ export class Project {
         this.readme = getReadme(packageJSON.path);
         this.module = createModule(packageJSON.contents.name, [], true, this.repository && `${this.repository}/${this.baseDir}`, false);
         if (extractor.settings.entryPoints.length !== 1) this.module.path.push(this.module.name);
-        console.log(this.module.path);
         this.extractor = extractor;
         this.fileCache = new Set();
         this.fileExportsCache = {};
@@ -131,10 +130,22 @@ export class Project {
             return this.module;
         }
         let lastModule = this.module;
+        const newPath = [];
+        const skipped = [];
         for (const pathPart of paths) {
             const newMod = lastModule.modules.get(pathPart);
+            if (this.extractor.settings.passthroughModules?.includes(pathPart)) {
+                skipped.push(pathPart);
+                continue;
+            }
+            newPath.push(pathPart);
             if (!newMod) {
-                const mod = createModule(pathPart, [...this.module.path, ...paths], false, `${lastModule.repository}/${pathPart}`, false);
+                let repoPath = `${lastModule.repository}/${pathPart}`;
+                if (skipped.length) {
+                    repoPath += `/${skipped.join("/")}`;
+                    skipped.length = 0;
+                }
+                const mod = createModule(pathPart, [...this.module.path, ...newPath], false, repoPath, false);
                 lastModule.modules.set(pathPart, mod);
                 lastModule = mod;
             } 
