@@ -87,7 +87,7 @@ export function createModule(name: string, path: Array<string>, isGlobal?: boole
 }
 
 export function createModuleRef(mod: Module, project: Project) : ReferenceType {
-    return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, path: mod.path, moduleName: project.module.name, name: mod.name }; 
+    return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, path: mod.path, name: mod.name, moduleName: mod.isNamespace ? project.module.name : undefined }; 
 }
 
 export const enum TypeKinds {
@@ -150,7 +150,7 @@ export const enum TypeReferenceKinds {
  * [[ReferenceType.displayName]] is only present when the referenced item is an **enum member**. The
  * property will be set to the member's name, while the **name** property will be set to the enum name.
  * 
- * Type parameters and [[TypeReferenceKinds.STRINGIFIED_UNKNOWN]] do not have a [[ReferenceType.moduleName]] property.
+ * Type parameters, references to modules (not namespaces!) and [[TypeReferenceKinds.STRINGIFIED_UNKNOWN]] do not have a [[ReferenceType.moduleName]] property.
  */
 export interface ReferenceType {
     name: string,
