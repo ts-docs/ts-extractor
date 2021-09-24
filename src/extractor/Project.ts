@@ -27,8 +27,10 @@ export class Project {
         this.homepage = packageJSON.contents.homepage;
         this.version = packageJSON.contents.version;
         this.readme = getReadme(packageJSON.path);
-        this.module = createModule(packageJSON.contents.name, [], true, this.repository && `${this.repository}/${this.baseDir}`, false);
-        if (extractor.settings.entryPoints.length !== 1) this.module.path.push(this.module.name);
+        let name = packageJSON.contents.name;
+        if (name.includes("/")) name = name.split("/")[1];
+        this.module = createModule(name, [], true, this.repository && `${this.repository}/${this.baseDir}`, false);
+        if (extractor.settings.entryPoints.length !== 1) this.module.path.push(name);
         this.extractor = extractor;
         this.fileCache = new Set();
         this.fileExportsCache = {};
