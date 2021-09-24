@@ -27,7 +27,7 @@ export class Project {
         this.homepage = packageJSON.contents.homepage;
         this.version = packageJSON.contents.version;
         this.readme = getReadme(packageJSON.path);
-        this.module = createModule(packageJSON.contents.name, [], true, this.repository && `${this.repository}/${this.baseDir}`, false);
+        this.module = createModule(packageJSON.contents.name, [packageJSON.contents.name], true, this.repository && `${this.repository}/${this.baseDir}`, false);
         this.extractor = extractor;
         this.fileCache = new Set();
         this.fileExportsCache = {};
