@@ -1,6 +1,4 @@
 import ts from "typescript";
-import { Project } from ".";
-
 
 /**
  * If the `references` property is an empty array, then everything (*) is exported from the module.
@@ -86,8 +84,8 @@ export function createModule(name: string, path: Array<string>, isGlobal?: boole
     };
 }
 
-export function createModuleRef(mod: Module, project: Project) : ReferenceType {
-    return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, path: mod.path, name: mod.name, moduleName: mod.isNamespace ? project.module.name : undefined }; 
+export function createModuleRef(mod: Module) : ReferenceType {
+    return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, path: mod.path, name: mod.name }; 
 }
 
 export const enum TypeKinds {
@@ -157,7 +155,6 @@ export interface ReferenceType {
     displayName?: string,
     path?: Array<string>,
     link?: string,
-    moduleName?: string,
     kind: TypeReferenceKinds
 }
 

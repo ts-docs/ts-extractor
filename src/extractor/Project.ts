@@ -53,7 +53,7 @@ export class Project {
                         if (!reExportedFile) continue;
                         const mod = this.getOrCreateModule(reExportedFile.fileName);
                         if (mod !== currentModule) {
-                            if (!reExports[mod.name]) reExports[mod.name] = {references: [], module: createModuleRef(mod, this) };
+                            if (!reExports[mod.name]) reExports[mod.name] = {references: [], module: createModuleRef(mod) };
                             this.visitor(reExportedFile, mod);
                         } else this.visitor(reExportedFile, mod, true);
                     }
@@ -73,7 +73,7 @@ export class Project {
                         if (!reExports[mod.name]) {
                             const references = [];
                             if (this.extractor.refs.has(aliased)) references.push(this.extractor.refs.get(aliased)!);
-                            reExports[mod.name] = { module: createModuleRef(mod, this), references, alias };
+                            reExports[mod.name] = { module: createModuleRef(mod), references, alias };
                         } else if (this.extractor.refs.has(aliased)) reExports[mod.name].references.push({...this.extractor.refs.get(aliased)!, alias });
                     } else {
                         const aliasedRef = this.extractor.refs.get(aliased);
@@ -81,7 +81,7 @@ export class Project {
                         if (!reExportsOfMod) continue;
                         if (!aliasedRef) {
                             const newMod = this.getOrCreateModule(aliased.name.replace(/"/g, ""));
-                            reExports[val.name] = { alias, module: createModuleRef(newMod, this), references: reExportsOfMod[0] };
+                            reExports[val.name] = { alias, module: createModuleRef(newMod), references: reExportsOfMod[0] };
                         }
                         else exports.push({ ...aliasedRef, alias });
                     }
@@ -98,7 +98,7 @@ export class Project {
                     if (!exportsFromMod) continue;
                     reExports[aliased.name] = {
                         alias: namespaceName,
-                        module: createModuleRef(mod, this),
+                        module: createModuleRef(mod),
                         references: exportsFromMod[0]
                     };
                 }
@@ -132,7 +132,7 @@ export class Project {
         for (const pathPart of paths) {
             const newMod = lastModule.modules.get(pathPart);
             if (!newMod) {
-                const mod = createModule(pathPart, paths, false, `${lastModule.repository}/${pathPart}`, false);
+                const mod = createModule(pathPart, [this.module.name, ...paths], false, `${lastModule.repository}/${pathPart}`, false);
                 lastModule.modules.set(pathPart, mod);
                 lastModule = mod;
             } 
@@ -202,7 +202,6 @@ export class Project {
             name,
             path: currentModule.path,
             kind: TypeReferenceKinds.CLASS,
-            moduleName: this.module.name
         };
         this.extractor.refs.set(symbol, ref);
         const properties: Array<ClassProperty> = [];
@@ -332,7 +331,6 @@ export class Project {
         const ref = {
             name: sym.name,
             path: currentModule.path,
-            moduleName: this.module.name,
             kind: TypeReferenceKinds.INTERFACE
         };
         this.extractor.refs.set(sym, ref);
@@ -373,7 +371,6 @@ export class Project {
         const ref = {
             name: sym.name,
             path: currentModule.path,
-            moduleName: this.module.name,
             kind: TypeReferenceKinds.ENUM
         };
         this.extractor.refs.set(sym, ref);
@@ -395,7 +392,6 @@ export class Project {
                         name: sym.name,
                         displayName: name,
                         path: currentModule.path,
-                        moduleName: this.module.name,
                         kind: TypeReferenceKinds.ENUM_MEMBER
                     });
                 }
@@ -420,7 +416,6 @@ export class Project {
         const ref = {
             name: sym.name,
             path: currentModule.path,
-            moduleName: this.module.name,
             kind: TypeReferenceKinds.TYPE_ALIAS
         };
         this.extractor.refs.set(sym, ref);
@@ -444,7 +439,6 @@ export class Project {
         const ref = {
             name: symbol.name,
             path: currentModule.path,
-            moduleName: this.module.name,
             kind: TypeReferenceKinds.NAMESPACE_OR_MODULE
         };
         this.extractor.refs.set(symbol, ref);
@@ -465,7 +459,6 @@ export class Project {
             name: sym.name,
             kind: TypeReferenceKinds.CONSTANT,
             path: currentModule.path,
-            moduleName: this.module.name
         };
         this.extractor.refs.set(sym, ref);
         const maxLen = this.extractor.settings.maxConstantTextLength || 256;
@@ -485,7 +478,6 @@ export class Project {
         const ref = {
             name: sym.name,
             path: currentModule.path,
-            moduleName: this.module.name,
             kind: TypeReferenceKinds.FUNCTION
         };
         this.extractor.refs.set(sym, ref);

@@ -42,9 +42,9 @@ const extractor = new TypescriptExtractor({
 const projects = extractor.run();
 ```
 
-### `ReferenceType#moduleName` instead of `ReferenceType#external`
+### No more `ReferenceType#external`
 
-All references now have a `moduleName` which is the name of the global module they're from. 
+The global module is now at the first index in the `path` property of the reference.
 
 ### `Module#exports` and `Module#reExports`
 
