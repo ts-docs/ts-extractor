@@ -27,7 +27,9 @@ export class Project {
         this.homepage = packageJSON.contents.homepage;
         this.version = packageJSON.contents.version;
         this.readme = getReadme(packageJSON.path);
-        this.module = createModule(packageJSON.contents.name, [packageJSON.contents.name], true, this.repository && `${this.repository}/${this.baseDir}`, false);
+        this.module = createModule(packageJSON.contents.name, [], true, this.repository && `${this.repository}/${this.baseDir}`, false);
+        if (extractor.settings.entryPoints.length !== 1) this.module.path.push(this.module.name);
+        console.log(this.module.path);
         this.extractor = extractor;
         this.fileCache = new Set();
         this.fileExportsCache = {};
@@ -132,7 +134,7 @@ export class Project {
         for (const pathPart of paths) {
             const newMod = lastModule.modules.get(pathPart);
             if (!newMod) {
-                const mod = createModule(pathPart, [this.module.name, ...paths], false, `${lastModule.repository}/${pathPart}`, false);
+                const mod = createModule(pathPart, [...this.module.path, ...paths], false, `${lastModule.repository}/${pathPart}`, false);
                 lastModule.modules.set(pathPart, mod);
                 lastModule = mod;
             } 
@@ -142,7 +144,7 @@ export class Project {
         return lastModule;
     }
 
-    forEachModule<R>(module = this.module, cb: (module: Module, path: Array<string>) => R|undefined, pathToMod: Array<string> = [module.name]) : R|undefined {
+    forEachModule<R>(module = this.module, cb: (module: Module, path: Array<string>) => R|undefined, pathToMod: Array<string> = []) : R|undefined {
         const firstCb = cb(module, pathToMod);
         if (firstCb) return firstCb;
         for (const [, mod] of module.modules) {

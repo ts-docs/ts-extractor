@@ -44,7 +44,7 @@ const projects = extractor.run();
 
 ### No more `ReferenceType#external`
 
-The global module is now at the first index in the `path` property of the reference.
+If there are multiple entry points, the global module will be at the first index in the `path` property of the reference. If there is only one entry point, the entire global module is omitted.
 
 ### `Module#exports` and `Module#reExports`
 
