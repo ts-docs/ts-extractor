@@ -60,6 +60,10 @@ Is now an array of objects like this:
 }
 ```
 
+### `ReferenceType#id` and `Node#id`
+
+If, for example there are 2 or more classes with the same name, inside the same module, then their nodes and all their references will have a matching `id` property.
+
 ## Examples
 
 ### External References

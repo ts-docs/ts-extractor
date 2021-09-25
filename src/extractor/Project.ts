@@ -16,6 +16,7 @@ export class Project {
     private fileCache: Set<string>
     private fileExportsCache: Record<string, [Array<ReferenceType>, Array<ModuleExport>]>
     private ignoreNamespaceMembers?: boolean
+    private idAcc: number
     constructor({folderPath, extractor, packageJSON}: {
         folderPath: Array<string>, 
         extractor: TypescriptExtractor
@@ -34,6 +35,7 @@ export class Project {
         this.extractor = extractor;
         this.fileCache = new Set();
         this.fileExportsCache = {};
+        this.idAcc = 0;
     }
 
     visitor(sourceFile: ts.SourceFile|ts.Symbol, currentModule?: Module, addToExports = false) : void {
@@ -213,7 +215,7 @@ export class Project {
         const decl = symbol.declarations![0] as ts.ClassDeclaration;
         if (!currentModule) currentModule = this.getOrCreateModule(decl.getSourceFile().fileName);
         const name = symbol.name;
-        const ref = {
+        const ref: ReferenceType = {
             name,
             path: currentModule.path,
             kind: TypeReferenceKinds.CLASS,
@@ -336,6 +338,7 @@ export class Project {
             const implementsClauses = decl.heritageClauses?.find(clause => clause.token === ts.SyntaxKind.ImplementsKeyword);
             classObj.implements = implementsClauses && implementsClauses.types.map(clause => this.resolveHeritage(clause));
         }
+        if (currentModule.classes.some(cl => cl.name === name)) classObj.id = ref.id = this.idAcc++;
         currentModule.classes.push(classObj);
         return ref;
     }
@@ -343,7 +346,7 @@ export class Project {
     handleInterfaceDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
         const firstDecl = sym.declarations!.find(decl => ts.isInterfaceDeclaration(decl)) as ts.InterfaceDeclaration;
         if (!currentModule) currentModule = this.getOrCreateModule(firstDecl.getSourceFile().fileName);
-        const ref = {
+        const ref: ReferenceType = {
             name: sym.name,
             path: currentModule.path,
             kind: TypeReferenceKinds.INTERFACE
@@ -368,6 +371,8 @@ export class Project {
             const implementsClause = firstDecl.heritageClauses.find(c => c.token === ts.SyntaxKind.ImplementsKeyword);
             implementsInt = implementsClause && implementsClause.types.map(impl => this.resolveType(impl));
         }
+        let id;
+        if (currentModule.classes.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.interfaces.push({
             name: sym.name,
             extends: extendsInt,
@@ -375,6 +380,7 @@ export class Project {
             loc,
             properties,
             jsDoc,
+            id,
             typeParameters: firstDecl.typeParameters && firstDecl.typeParameters.map(p => this.resolveTypeParameters(p))
         });
         return ref;
@@ -383,7 +389,7 @@ export class Project {
     handleEnumDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
         const firstDecl = sym.declarations![0];
         if (!currentModule) currentModule = this.getOrCreateModule(firstDecl.getSourceFile().fileName);
-        const ref = {
+        const ref: ReferenceType = {
             name: sym.name,
             path: currentModule.path,
             kind: TypeReferenceKinds.ENUM
@@ -415,12 +421,15 @@ export class Project {
             const jsDocData = this.getJSDocData(decl);
             if (jsDocData) jsDoc.push(...jsDocData);
         }
+        let id;
+        if (currentModule.classes.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.enums.push({
             name: sym.name,
             isConst: Boolean(firstDecl.modifiers && firstDecl.modifiers.some(mod => mod.kind === ts.SyntaxKind.ConstKeyword)),
             loc,
             jsDoc,
-            members
+            members,
+            id
         });
         return ref;
     }
@@ -428,18 +437,21 @@ export class Project {
     handleTypeAliasDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
         const decl = sym.declarations!.find(decl => ts.isTypeAliasDeclaration(decl)) as ts.TypeAliasDeclaration;
         if (!currentModule) currentModule = this.getOrCreateModule(decl.getSourceFile().fileName);
-        const ref = {
+        const ref: ReferenceType = {
             name: sym.name,
             path: currentModule.path,
             kind: TypeReferenceKinds.TYPE_ALIAS
         };
         this.extractor.refs.set(sym, ref);
+        let id;
+        if (currentModule.classes.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.types.push({
             name: sym.name,
             value: this.resolveType(decl.type),
             typeParameters: decl.typeParameters?.map(param => this.resolveTypeParameters(param)),
             loc: this.getLOC(currentModule, decl),
-            jsDoc: this.getJSDocData(decl)
+            jsDoc: this.getJSDocData(decl),
+            id
         });
         return ref;
     }
@@ -470,7 +482,7 @@ export class Project {
     handleVariableDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
         const decl = sym.declarations!.find(decl => ts.isVariableDeclaration(decl)) as ts.VariableDeclaration;
         if (!currentModule) currentModule = this.getOrCreateModule(decl.getSourceFile().fileName);
-        const ref = {
+        const ref: ReferenceType = {
             name: sym.name,
             kind: TypeReferenceKinds.CONSTANT,
             path: currentModule.path,
@@ -478,11 +490,14 @@ export class Project {
         this.extractor.refs.set(sym, ref);
         const maxLen = this.extractor.settings.maxConstantTextLength || 256;
         const text = decl.initializer && decl.initializer.getText();
+        let id;
+        if (currentModule.classes.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.constants.push({
             name: decl.name.getText(),
             loc: this.getLOC(currentModule, decl),
             jsDoc: this.getJSDocData(decl),
-            content: text && (text.length > maxLen) ? text.slice(0, maxLen) : text
+            content: text && (text.length > maxLen) ? text.slice(0, maxLen) : text,
+            id
         });
         return ref;
     }
@@ -490,7 +505,7 @@ export class Project {
     handleFunctionDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
         const lastDecl = sym.declarations![sym.declarations!.length - 1];
         if (!currentModule) currentModule = this.getOrCreateModule(lastDecl.getSourceFile().fileName);
-        const ref = {
+        const ref: ReferenceType = {
             name: sym.name,
             path: currentModule.path,
             kind: TypeReferenceKinds.FUNCTION
@@ -505,10 +520,13 @@ export class Project {
                 jsDoc: this.getJSDocData(decl)
             });
         }
+        let id;
+        if (currentModule.classes.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.functions.push({
             name: sym.name,
             signatures,
-            loc: this.getLOC(currentModule, lastDecl)
+            loc: this.getLOC(currentModule, lastDecl),
+            id
         });
         return ref;
     }

@@ -55,7 +55,11 @@ export interface Node {
     name: string,
     loc: Loc
     jsDoc?: Array<JSDocData>,
-    isExported?: boolean
+    isExported?: boolean,
+    /**
+     * Only classes, interfaces, enums, functions, types and constants have an ID, and they only have it if there is another thing of the same type with the same name.
+     */
+    id?: number
 }
 
 export type NamelessNode = Omit<Node, "name">;
@@ -65,9 +69,9 @@ export type NodeWithManyLOC = {
     name: string,
     jsDoc?: Array<JSDocData>,
     isExported?: boolean
-    loc: Array<Loc>
+    loc: Array<Loc>,
+    id?: number
 }
-
 
 export function createModule(name: string, path: Array<string>, isGlobal?: boolean, repository?: string, isNamespace?: boolean) : Module {
     return {
@@ -160,6 +164,7 @@ export interface ReferenceType {
      * If this property is not undefined, then the reference is external. External references don't have a path.
      */
     link?: string,
+    id?: number,
     kind: TypeReferenceKinds
 }
 
