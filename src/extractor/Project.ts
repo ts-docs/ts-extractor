@@ -35,7 +35,7 @@ export class Project {
         this.extractor = extractor;
         this.fileCache = new Set();
         this.fileExportsCache = {};
-        this.idAcc = 0;
+        this.idAcc = 1;
     }
 
     visitor(sourceFile: ts.SourceFile|ts.Symbol, currentModule?: Module, addToExports = false) : void {
