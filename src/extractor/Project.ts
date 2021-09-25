@@ -534,7 +534,10 @@ export class Project {
         if (ts.isTypeReferenceNode(type)) {
             const symbol = this.extractor.checker.getSymbolAtLocation(type.typeName);
             const typeArguments = type.typeArguments?.map(arg => this.resolveType(arg));
-            if (symbol) return this.resolveSymbol(symbol, typeArguments);
+            if (symbol) {
+                if (symbol.name === "unknown") return { kind: TypeKinds.REFERENCE, typeArguments, type: { kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN, name: type.typeName.getText() }};
+                return this.resolveSymbol(symbol, typeArguments);
+            }
             const externalMaybe = this.extractor.refs.findUnnamedExternal(type.typeName.getText());
             if (externalMaybe) return {
                 kind: TypeKinds.REFERENCE,
