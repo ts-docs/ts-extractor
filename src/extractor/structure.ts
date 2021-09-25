@@ -6,7 +6,11 @@ import ts from "typescript";
 export interface ModuleExport {
     module: ReferenceType,
     alias?: string,
-    references: Array<AliasedReference>
+    references: Array<AliasedReference>,
+    /**
+     * If the module re-exports a re-export with an "alias". Confusing, I know.
+     */
+    reExportsReExport?: string
 }
 
 export interface AliasedReference extends ReferenceType {
@@ -141,19 +145,20 @@ export const enum TypeReferenceKinds {
     EXTERNAL
 }
 
-/**
- * If the object's [[ReferenceType.link]] property is not undefined, then that means it's an **external**
- * object. The [[ReferenceType.moduleName]] property will be set to the external library's name.
- * 
- * [[ReferenceType.displayName]] is only present when the referenced item is an **enum member**. The
- * property will be set to the member's name, while the **name** property will be set to the enum name.
- * 
- * Type parameters, references to modules (not namespaces!) and [[TypeReferenceKinds.STRINGIFIED_UNKNOWN]] do not have a [[ReferenceType.moduleName]] property.
- */
 export interface ReferenceType {
     name: string,
+    /**
+     * The display name of the reference. If the reference is an enum member, this will be set to the **member**'s name,
+     * while the [[ReferenceType.name]] property will be set to the enum's name.
+     */
     displayName?: string,
+    /**
+     * The module path to the reference.
+     */
     path?: Array<string>,
+    /**
+     * If this property is not undefined, then the reference is external. External references don't have a path.
+     */
     link?: string,
     kind: TypeReferenceKinds
 }

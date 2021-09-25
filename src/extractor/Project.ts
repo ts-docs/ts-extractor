@@ -72,22 +72,22 @@ export class Project {
                     const mod = this.getOrCreateModule(source.fileName);
                     this.visitor(source, mod);
                     const alias = val.name !== aliased.name ? val.name : undefined;
-                    if (mod !== currentModule) {
-                        if (!reExports[mod.name]) {
-                            const references = [];
-                            if (this.extractor.refs.has(aliased)) references.push(this.extractor.refs.get(aliased)!);
-                            reExports[mod.name] = { module: createModuleRef(mod), references, alias };
-                        } else if (this.extractor.refs.has(aliased)) reExports[mod.name].references.push({...this.extractor.refs.get(aliased)!, alias });
-                    } else {
-                        const aliasedRef = this.extractor.refs.get(aliased);
-                        const reExportsOfMod = this.fileExportsCache[aliased.name];
-                        if (!reExportsOfMod) continue;
-                        if (!aliasedRef) {
-                            const newMod = this.getOrCreateModule(aliased.name.replace(/"/g, ""));
-                            reExports[val.name] = { alias, module: createModuleRef(newMod), references: reExportsOfMod[0] };
+                    const aliasedRef = this.extractor.refs.get(aliased);
+                    if (!aliasedRef) {
+                        const realMod = this.getOrCreateModule(aliased.name);
+                        const fileExports = this.fileExportsCache[aliased.name];
+                        if (realMod.reExports.some(ex => ex.alias === alias)) reExports[val.name] = { module: createModuleRef(realMod), reExportsReExport: alias, references: [] };
+                        else {
+                            if (!fileExports) continue;
+                            reExports[val.name] = { alias, module: createModuleRef(realMod), references: fileExports[0] };
                         }
-                        else exports.push({ ...aliasedRef, alias });
+                        continue;
                     }
+                    if (mod !== currentModule) {
+                        if (!reExports[mod.name]) reExports[mod.name] = { module: createModuleRef(mod), references: [this.extractor.refs.get(aliased)!], alias };
+                        else reExports[mod.name].references.push({...this.extractor.refs.get(aliased)!, alias });
+                    } 
+                    else exports.push({ ...aliasedRef, alias });
                 } 
                 // export * as X from "...";
                 // Always goes to "reExports"

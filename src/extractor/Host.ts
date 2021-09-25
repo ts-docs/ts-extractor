@@ -11,9 +11,18 @@ export function createHost(options: ts.CompilerOptions, customModules: Map<strin
         for (const module of mods) {
             let part = module;
             let rest = "";
-            if (!module.startsWith(".") && module.includes("/")) {
-                const firstSlash = module.indexOf("/");
-                part = module.slice(0, firstSlash);
+            // Handles paths like @thing/a
+            if (module.startsWith("@")) {
+                const secondSlash = module.indexOf("/", module.indexOf("/") + 1);
+                if (secondSlash !== -1) {
+                    part = module.slice(0, secondSlash);
+                    if (extractorOptions.ignoreFolderNames) rest = removePartOfPath(module.slice(secondSlash).split("/"), extractorOptions.ignoreFolderNames) + ".ts"; 
+                    else rest = module.slice(secondSlash) + ".ts";
+                }
+            }
+            else if (!part.startsWith(".") && part.includes("/")) {
+                const firstSlash = part.indexOf("/");
+                part = part.slice(0, firstSlash);
                 if (extractorOptions.ignoreFolderNames) rest = removePartOfPath(module.slice(firstSlash).split("/"), extractorOptions.ignoreFolderNames) + ".ts"; 
                 else rest = module.slice(firstSlash) + ".ts";   
             }
