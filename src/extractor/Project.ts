@@ -270,6 +270,7 @@ export class Project {
             else if (ts.isMethodDeclaration(member)) {
                 const methodName = member.name.getText();
                 const method = methods.get(methodName);
+                const computedName = ts.isComputedPropertyName(member.name) ? this.resolveExpressionToType(member.name.expression) : undefined;
                 if (method) {
                     method.signatures.push({
                         returnType: this.resolveReturnType(member),
@@ -280,7 +281,8 @@ export class Project {
                     if (member.body) method.loc = this.getLOC(currentModule, member);
                 } else {
                     methods.set(methodName, {
-                        name: methodName,
+                        name: computedName || methodName,
+                        realName: computedName ? methodName : undefined,
                         loc: this.getLOC(currentModule, member),
                         isPrivate, isProtected, isStatic, isAbstract,
                         jsDoc: this.getJSDocData(member),
@@ -295,8 +297,10 @@ export class Project {
             }
             else if (ts.isGetAccessor(member)) {
                 const methodName = member.name.getText();
+                const computedName = ts.isComputedPropertyName(member.name) ? this.resolveExpressionToType(member.name.expression) : undefined;
                 methods.set(methodName, {
-                    name: methodName,
+                    name: computedName || methodName,
+                    realName: computedName ? methodName : undefined,
                     signatures: [{
                         returnType: this.resolveReturnType(member),
                         jsDoc: this.getJSDocData(member)
@@ -309,8 +313,10 @@ export class Project {
             } 
             else if (ts.isSetAccessor(member)) {
                 const methodName = member.name.getText();
+                const computedName = ts.isComputedPropertyName(member.name) ? this.resolveExpressionToType(member.name.expression) : undefined;
                 methods.set(methodName, {
-                    name: methodName,
+                    name: computedName || methodName,
+                    realName: computedName ? methodName : undefined,
                     signatures: [{
                         returnType: this.resolveReturnType(member),
                         parameters: member.parameters.map(p => this.resolveParameter(p)),
@@ -773,23 +779,27 @@ export class Project {
         };
     }
 
-    resolveExpressionToType(exp: ts.Node) : Type|undefined {
+    resolveExpressionToType(exp: ts.Node) : Type {
         if (ts.isNewExpression(exp)) {
             const expSym = this.extractor.checker.getSymbolAtLocation(exp.expression);
-            if (!expSym) return;
+            if (!expSym) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
             return this.resolveSymbol(expSym, exp.typeArguments?.map(arg => this.resolveType(arg)));
         }
-        const sym = this.extractor.checker.getSymbolAtLocation(exp);
-        if (sym) return this.resolveSymbol(sym);
         switch (exp.kind) {
         case ts.SyntaxKind.BigIntLiteral:
+        case ts.SyntaxKind.PrefixUnaryExpression:
+        case ts.SyntaxKind.PostfixUnaryExpression:
         case ts.SyntaxKind.NumericLiteral: return { name: exp.getText(), kind: TypeKinds.NUMBER_LITERAL };
         case ts.SyntaxKind.FalseKeyword: return { name: "false", kind: TypeKinds.FALSE };
         case ts.SyntaxKind.TrueKeyword: return { name: "true", kind: TypeKinds.TRUE };
         case ts.SyntaxKind.StringLiteral: return { name: exp.getText(), kind: TypeKinds.STRING_LITERAL };
         case ts.SyntaxKind.NullKeyword: return { name: "null", kind: TypeKinds.NULL };
         case ts.SyntaxKind.UndefinedKeyword: return { name: "undefined", kind: TypeKinds.UNDEFINED };
-        default: return { name: exp.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
+        default: {
+            const sym = this.extractor.checker.getSymbolAtLocation(exp);
+            if (sym) return this.resolveSymbol(sym);
+            return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
+        }
         }
     }
 

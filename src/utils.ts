@@ -37,10 +37,12 @@ export function getRepository(packageJSON: PackageJSON) : string|undefined {
         const branch = getBranchName(packageJSON.path);
         return `https://${type}.com/${link}/tree/${branch}`;
     } else {
-        const {type, url} = repository;
+        // eslint-disable-next-line prefer-const
+        let {type, url} = repository;
         const branch = getBranchName(packageJSON.path);
         // eslint-disable-next-line no-useless-escape
-        return `${url.replace(new RegExp(`${type}\\+|\\.${type}|${type}:\/\/`, "g"), "")}/tree/${branch}${repository.directory || ""}`;
+        url = url.replace(new RegExp(`${type}:\/\/`, "g"), "https://");
+        return `${url.replace(new RegExp(`${type}\\+|\\.${type}`, "g"), "")}/tree/${branch}${repository.directory || ""}`;
     }
 }
 

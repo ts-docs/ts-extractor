@@ -227,10 +227,12 @@ export interface FunctionSignature extends LoclessNode {
     returnType?: Type
 }
 
-export interface ClassMethod extends ClassMember {
+export interface ClassMethod extends Omit<ClassMember, "name"> {
     signatures: Array<FunctionSignature>,
     isGetter?: boolean,
-    isSetter?: boolean
+    isSetter?: boolean,
+    name: string | Type,
+    realName?: string
 }
 
 export interface ClassDecl extends Node {
