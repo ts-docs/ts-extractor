@@ -347,7 +347,8 @@ export class Project {
             methods: [...methods.values()],
             loc: this.getLOC(currentModule, decl),
             jsDoc: this.getJSDocData(decl),
-            isAbstract: decl.modifiers && decl.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword)
+            isAbstract: decl.modifiers && decl.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
+            _constructor: constructor
         };
         if (decl.heritageClauses) {
             const extendsClause = decl.heritageClauses.find(clause => clause.token === ts.SyntaxKind.ExtendsKeyword);

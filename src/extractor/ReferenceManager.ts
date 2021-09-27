@@ -61,8 +61,9 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
         return;
     } 
 
-    findByNameWithModule(name: string, project: Project) : ReferenceType|undefined {
+    findByNameWithModule(name: string, project: Project, path?: Array<string>) : ReferenceType|undefined {
         return project.forEachModule<ReferenceType>(project.module, (module, path) => {
+            if (module.name === name) return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, name, path };
             if (module.classes.some(cl => cl.name === name)) return { kind: TypeReferenceKinds.CLASS, name, path };
             if (module.interfaces.some(int => int.name === name)) return { kind: TypeReferenceKinds.INTERFACE, name, path };
             if (module.enums.some(en => en.name === name)) return { kind: TypeReferenceKinds.ENUM, name, path };
@@ -71,7 +72,7 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
             if (module.constants.some(c => c.name === name)) return { kind: TypeReferenceKinds.CONSTANT, name, path };
             if (module.modules.has(name)) return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, name, path };
             return;
-        });
+        }, path);
     }
 
     findByPath(name: string, path: Array<string>, project: Project) : ReferenceType|undefined {

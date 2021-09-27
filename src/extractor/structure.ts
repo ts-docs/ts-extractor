@@ -235,12 +235,14 @@ export interface ClassMethod extends Omit<ClassMember, "name"> {
     realName?: string
 }
 
+export type ClassConstructor = Omit<FunctionDecl, "name">
+
 export interface ClassDecl extends Node {
     typeParameters?: Array<TypeParameter>,
     properties: Array<ClassProperty>,
     methods: Array<ClassMethod>,
     extends?: Reference,
-    _constructor?: Omit<FunctionDecl, "name">,
+    _constructor?: ClassConstructor,
     implements?: Array<Type>,
     isAbstract?: boolean
 }
