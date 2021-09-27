@@ -40,7 +40,10 @@ export class Project {
 
     visitor(sourceFile: ts.SourceFile|ts.Symbol, currentModule?: Module, addToExports = false) : void {
         let sym;
-        if ("fileName" in sourceFile) sym = this.extractor.checker.getSymbolAtLocation(sourceFile);
+        if ("fileName" in sourceFile) {
+            if (this.extractor.program.isSourceFileFromExternalLibrary(sourceFile) || this.extractor.program.isSourceFileDefaultLibrary(sourceFile)) return;
+            sym = this.extractor.checker.getSymbolAtLocation(sourceFile);
+        }
         else sym = sourceFile;
         if (!sym || !sym.exports) return;
         if (this.fileCache.has(sym.name)) return;
@@ -135,7 +138,7 @@ export class Project {
         }
         let lastModule = this.module;
         const newPath = [];
-        const skipped = [];
+        const skipped: Array<string> = [];
         for (const pathPart of paths) {
             const newMod = lastModule.modules.get(pathPart);
             if (this.extractor.settings.passthroughModules?.includes(pathPart)) {
@@ -144,11 +147,12 @@ export class Project {
             }
             newPath.push(pathPart);
             if (!newMod) {
-                let repoPath = `${lastModule.repository}/${pathPart}`;
-                if (skipped.length) {
+                let repoPath = (lastModule.repository || "");
+                if (skipped.length && !repoPath.split("/").some(p => skipped.includes(p))) {
                     repoPath += `/${skipped.join("/")}`;
                     skipped.length = 0;
                 }
+                repoPath += `/${pathPart}`;
                 const mod = createModule(pathPart, [...this.module.path, ...newPath], false, repoPath, false);
                 lastModule.modules.set(pathPart, mod);
                 lastModule = mod;
@@ -172,13 +176,21 @@ export class Project {
     handleSymbol(val: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
         if (!val.declarations || !val.declarations.length) return;
         if (this.extractor.refs.has(val)) return this.extractor.refs.get(val);
+
+        if (!currentModule) {
+            const origin = val.declarations[0].getSourceFile();
+            if (this.extractor.program.isSourceFileFromExternalLibrary(origin) || this.extractor.program.isSourceFileDefaultLibrary(origin)) return this.extractor.refs.findExternal(val);
+            currentModule = this.getOrCreateModule(origin.fileName);
+        }
+
         if (!this.ignoreNamespaceMembers && ts.isModuleBlock(val.declarations[0].parent)) {
             const namespaceSym = this.extractor.checker.getSymbolAtLocation(val.declarations[0].parent.parent.name);
             if (namespaceSym) {
-                if (!this.extractor.refs.has(namespaceSym)) this.handleNamespaceDecl(namespaceSym);
+                if (!this.extractor.refs.has(namespaceSym)) this.handleNamespaceDecl(namespaceSym, currentModule);
                 return this.extractor.refs.get(val);
             }
         }
+
         // TODO?: A symbol can both be an interface/type alias and a variable/function. 
         if (hasBit(val.flags, ts.SymbolFlags.Class)) return this.handleClassDecl(val, currentModule);
         else if (hasBit(val.flags, ts.SymbolFlags.Interface)) return this.handleInterfaceDecl(val, currentModule);
@@ -211,9 +223,8 @@ export class Project {
         }
     }
 
-    handleClassDecl(symbol: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
+    handleClassDecl(symbol: ts.Symbol, currentModule: Module) : ReferenceType | undefined {
         const decl = symbol.declarations![0] as ts.ClassDeclaration;
-        if (!currentModule) currentModule = this.getOrCreateModule(decl.getSourceFile().fileName);
         const name = symbol.name;
         const ref: ReferenceType = {
             name,
@@ -349,9 +360,8 @@ export class Project {
         return ref;
     }
 
-    handleInterfaceDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
+    handleInterfaceDecl(sym: ts.Symbol, currentModule: Module) : ReferenceType | undefined {
         const firstDecl = sym.declarations!.find(decl => ts.isInterfaceDeclaration(decl)) as ts.InterfaceDeclaration;
-        if (!currentModule) currentModule = this.getOrCreateModule(firstDecl.getSourceFile().fileName);
         const ref: ReferenceType = {
             name: sym.name,
             path: currentModule.path,
@@ -392,9 +402,8 @@ export class Project {
         return ref;
     }
 
-    handleEnumDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
+    handleEnumDecl(sym: ts.Symbol, currentModule: Module) : ReferenceType | undefined {
         const firstDecl = sym.declarations![0];
-        if (!currentModule) currentModule = this.getOrCreateModule(firstDecl.getSourceFile().fileName);
         const ref: ReferenceType = {
             name: sym.name,
             path: currentModule.path,
@@ -440,9 +449,8 @@ export class Project {
         return ref;
     }
 
-    handleTypeAliasDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
+    handleTypeAliasDecl(sym: ts.Symbol, currentModule: Module) : ReferenceType | undefined {
         const decl = sym.declarations!.find(decl => ts.isTypeAliasDeclaration(decl)) as ts.TypeAliasDeclaration;
-        if (!currentModule) currentModule = this.getOrCreateModule(decl.getSourceFile().fileName);
         const ref: ReferenceType = {
             name: sym.name,
             path: currentModule.path,
@@ -462,9 +470,8 @@ export class Project {
         return ref;
     }
 
-    handleNamespaceDecl(symbol: ts.Symbol, currentModule?: Module) : ReferenceType|undefined {
+    handleNamespaceDecl(symbol: ts.Symbol, currentModule: Module) : ReferenceType|undefined {
         const firstDecl = symbol.declarations![0]! as ts.ModuleDeclaration;
-        if (!currentModule) currentModule = this.getOrCreateModule(firstDecl.getSourceFile().fileName);
         const newMod = createModule(firstDecl.name.text, [...currentModule.path, firstDecl.name.text], false, undefined, true);
         const namespaceLoc = this.getLOC(newMod, firstDecl);
         newMod.repository = namespaceLoc.sourceFile;
@@ -485,9 +492,8 @@ export class Project {
         return ref;
     }
 
-    handleVariableDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
+    handleVariableDecl(sym: ts.Symbol, currentModule: Module) : ReferenceType | undefined {
         const decl = sym.declarations!.find(decl => ts.isVariableDeclaration(decl)) as ts.VariableDeclaration;
-        if (!currentModule) currentModule = this.getOrCreateModule(decl.getSourceFile().fileName);
         const ref: ReferenceType = {
             name: sym.name,
             kind: TypeReferenceKinds.CONSTANT,
@@ -508,9 +514,8 @@ export class Project {
         return ref;
     }
 
-    handleFunctionDecl(sym: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
+    handleFunctionDecl(sym: ts.Symbol, currentModule: Module) : ReferenceType | undefined {
         const lastDecl = sym.declarations![sym.declarations!.length - 1];
-        if (!currentModule) currentModule = this.getOrCreateModule(lastDecl.getSourceFile().fileName);
         const ref: ReferenceType = {
             name: sym.name,
             path: currentModule.path,
@@ -712,8 +717,7 @@ export class Project {
         if (fn.type) return this.resolveType(fn.type);
         const sig = this.extractor.checker.getSignatureFromDeclaration(fn);
         if (!sig) return;
-        const type = this.extractor.checker.getReturnTypeOfSignature(sig);
-        if (!type) return;
+        const type = sig.getReturnType();
         const sym = type.getSymbol();
         if (!sym) return;
         //@ts-expect-error Internal API

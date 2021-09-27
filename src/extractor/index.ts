@@ -52,7 +52,6 @@ export class TypescriptExtractor {
         
         const options = tsconfig.config.compilerOptions || ts.getDefaultCompilerOptions();
         options.types = [];
-        options.noLib = true;
         const packagesMap = new Map<string, string>(); // package name - package path
         const packageJSONs = new Map<string, PackageJSON>();
         for (let i=0; i < this.settings.entryPoints.length; i++) {
