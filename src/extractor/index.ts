@@ -29,7 +29,11 @@ export interface TypescriptExtractorSettings {
     /**
      * Any folder names in the provided array will be ignored - they won't become modules, items inside them will be inside the parent module.
      */
-    passthroughModules?: Array<string>
+    passthroughModules?: Array<string>,
+    /**
+     * Change the cwd (current working directory)
+     */
+    cwd?: string
 }
 
 export class TypescriptExtractor {
@@ -45,12 +49,16 @@ export class TypescriptExtractor {
     }
 
     run() : Array<Project> {
-        const tsconfigPath = ts.findConfigFile(process.cwd(), (file) => fs.existsSync(file), "tsconfig.json");
-        if (!tsconfigPath) throw new Error("Couldn't find tsconfig.json");
-        const tsconfig = ts.parseConfigFileTextToJson("tsconfig.json", fs.readFileSync(tsconfigPath, "utf-8"));
-        if (tsconfig.error) throw new Error(ts.flattenDiagnosticMessageText(tsconfig.error.messageText, "\n"));
+        const cwd = this.settings.cwd || process.cwd();
+        let tsconfig;
+        const tsconfigPath = ts.findConfigFile(cwd, (file) => fs.existsSync(file), "tsconfig.json");
+        if (tsconfigPath) {
+            tsconfig = ts.parseConfigFileTextToJson("tsconfig.json", fs.readFileSync(tsconfigPath, "utf-8"));
+            if (tsconfig.error) throw new Error(ts.flattenDiagnosticMessageText(tsconfig.error.messageText, "\n"));
+            tsconfig = tsconfig.config.compilerOptions;
+        }
         
-        const options = tsconfig.config.compilerOptions || ts.getDefaultCompilerOptions();
+        const options = tsconfig || ts.getDefaultCompilerOptions();
         options.types = [];
         const packagesMap = new Map<string, string>(); // package name - package path
         const packageJSONs = new Map<string, PackageJSON>();
@@ -71,9 +79,9 @@ export class TypescriptExtractor {
 
         this.checker = this.program.getTypeChecker();
         const projects = [];
-        const base = process.cwd().split(path.sep);
+        const base = cwd.split(path.sep);
         for (const entryPoint of this.settings.entryPoints) {
-            const sourceFile = this.program.getSourceFile(path.join(process.cwd(), entryPoint));
+            const sourceFile = this.program.getSourceFile(path.isAbsolute(entryPoint) ? entryPoint : path.join(cwd, entryPoint));
             if (!sourceFile) continue;
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
             const project = new Project({folderPath: removePartOfEndOfPath(sourceFile.fileName, base), extractor: this, packageJSON: packageJSONs.get(entryPoint)! });
