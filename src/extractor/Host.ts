@@ -4,7 +4,7 @@ import { TypescriptExtractorSettings } from ".";
 import { removePartOfPath } from "../utils";
 
 
-export function createHost(options: ts.CompilerOptions, customModules: Map<string, string>, extractorOptions: TypescriptExtractorSettings) : ts.CompilerHost {
+export function createHost(options: ts.CompilerOptions, customModules: Map<string, string>, extractorOptions: TypescriptExtractorSettings, cwd: string) : ts.CompilerHost {
     const defaultHost = ts.createCompilerHost(options, true);
     defaultHost.resolveModuleNames = (mods, file) => {
         const res: Array<ts.ResolvedModuleFull|undefined> = [];
@@ -28,8 +28,8 @@ export function createHost(options: ts.CompilerOptions, customModules: Map<strin
             }
             if (customModules.has(part)) {
                 let resolvedFileName;
-                if (rest) resolvedFileName = path.join(process.cwd(), path.parse(customModules.get(part) as string).dir, rest).replace(/\\/g, "/");
-                else resolvedFileName = path.join(process.cwd(), customModules.get(part) as string).replace(/\\/g, "/");
+                if (rest) resolvedFileName = path.join(cwd, path.parse(customModules.get(part) as string).dir, rest).replace(/\\/g, "/");
+                else resolvedFileName = path.join(cwd, customModules.get(part) as string).replace(/\\/g, "/");
                 res.push({
                     resolvedFileName,
                     isExternalLibraryImport: false,

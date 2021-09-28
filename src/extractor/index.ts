@@ -74,7 +74,7 @@ export class TypescriptExtractor {
             packageJSONs.set(entryPoint, packageJSON);
         }
 
-        const host = createHost(options, packagesMap, this.settings);
+        const host = createHost(options, packagesMap, this.settings, cwd);
         this.program = ts.createProgram(this.settings.entryPoints, options, host);
 
         this.checker = this.program.getTypeChecker();
