@@ -28,8 +28,9 @@ export function createHost(options: ts.CompilerOptions, customModules: Map<strin
             }
             if (customModules.has(part)) {
                 let resolvedFileName;
-                if (rest) resolvedFileName = path.join(cwd, path.parse(customModules.get(part) as string).dir, rest).replace(/\\/g, "/");
-                else resolvedFileName = path.join(cwd, customModules.get(part) as string).replace(/\\/g, "/");
+                const customModulePart = customModules.get(part) as string;
+                if (rest) resolvedFileName = (path.isAbsolute(customModulePart) ? path.join(path.parse(customModulePart).dir, rest) : path.join(cwd, path.parse(customModules.get(part) as string).dir, rest)).replace(/\\/g, "/");
+                else resolvedFileName = (path.isAbsolute(customModulePart) ? customModulePart : path.join(cwd, customModulePart)).replace(/\\/g, "/");
                 res.push({
                     resolvedFileName,
                     isExternalLibraryImport: false,
