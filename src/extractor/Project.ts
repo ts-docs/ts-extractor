@@ -140,6 +140,7 @@ export class Project {
         const newPath = [];
         const skipped: Array<string> = [];
         for (const pathPart of paths) {
+            if (pathPart === "") break;
             const newMod = lastModule.modules.get(pathPart);
             if (this.extractor.settings.passthroughModules?.includes(pathPart)) {
                 skipped.push(pathPart);
@@ -147,12 +148,15 @@ export class Project {
             }
             newPath.push(pathPart);
             if (!newMod) {
-                let repoPath = (lastModule.repository || "");
-                if (skipped.length && !repoPath.split("/").some(p => skipped.includes(p))) {
-                    repoPath += `/${skipped.join("/")}`;
-                    skipped.length = 0;
+                let repoPath;
+                if (lastModule.repository) {
+                    repoPath = lastModule.repository;
+                    if (skipped.length && !repoPath.split("/").some(p => skipped.includes(p))) {
+                        repoPath += `/${skipped.join("/")}`;
+                        skipped.length = 0;
+                    }
+                    repoPath += `/${pathPart}`;
                 }
-                repoPath += `/${pathPart}`;
                 const mod = createModule(pathPart, [...this.module.path, ...newPath], false, repoPath, false);
                 lastModule.modules.set(pathPart, mod);
                 lastModule = mod;

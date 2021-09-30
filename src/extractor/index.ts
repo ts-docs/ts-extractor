@@ -50,16 +50,17 @@ export class TypescriptExtractor {
 
     run() : Array<Project> {
         const cwd = this.settings.cwd || process.cwd();
-        let tsconfig;
+        let tsconfig: ts.CompilerOptions | undefined;
         const tsconfigPath = ts.findConfigFile(cwd, (file) => fs.existsSync(file), "tsconfig.json");
         if (tsconfigPath) {
-            tsconfig = ts.parseConfigFileTextToJson("tsconfig.json", fs.readFileSync(tsconfigPath, "utf-8"));
-            if (tsconfig.error) throw new Error(ts.flattenDiagnosticMessageText(tsconfig.error.messageText, "\n"));
-            tsconfig = tsconfig.config.compilerOptions;
+            const configRes = ts.parseConfigFileTextToJson("tsconfig.json", fs.readFileSync(tsconfigPath, "utf-8"));
+            if (configRes.error) throw new Error(ts.flattenDiagnosticMessageText(configRes.error.messageText, "\n"));
+            tsconfig = configRes.config.compilerOptions;
         }
         
         const options = tsconfig || ts.getDefaultCompilerOptions();
         options.types = [];
+        options.skipLibCheck = true;
         const packagesMap = new Map<string, string>(); // package name - package path
         const packageJSONs = new Map<string, PackageJSON>();
         for (let i=0; i < this.settings.entryPoints.length; i++) {
@@ -68,6 +69,7 @@ export class TypescriptExtractor {
                 entryPoint = `${entryPoint}.ts`;
                 this.settings.entryPoints[i] = entryPoint;
             }
+            if (!fs.existsSync(entryPoint)) throw new Error(`Couldn't find file '${entryPoint}'`);
             const packageJSON = findPackageJSON(entryPoint);
             if (!packageJSON) throw new Error("Couldn't find package.json file.");
             packagesMap.set(packageJSON.contents.name, entryPoint);
