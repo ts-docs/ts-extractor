@@ -132,7 +132,8 @@ export const enum TypeKinds {
     NEVER,
     OBJECT,
     INFER_TYPE,
-    REGEX_LITERAL
+    REGEX_LITERAL,
+    CONSTRUCTOR_TYPE
 }
 
 export const enum TypeReferenceKinds {
@@ -178,7 +179,7 @@ export interface Reference extends BaseType {
     typeArguments?: Array<Type>
 }
 
-export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType | TypePredicateType | InferType;
+export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType | TypePredicateType | InferType | ConstructorType;
 
 /**
  * `string`, `number`, `boolean`, etc.
@@ -206,10 +207,10 @@ export interface Property {
     isReadonly?: boolean,
     isOptional: boolean,
     initializer?: Type
+    exclamation?: boolean,
 }
 
 export interface ClassProperty extends ClassMember, Property {
-    type?: Type,
     exclamation?: boolean,
 }
 
@@ -240,7 +241,7 @@ export type ClassConstructor = Omit<FunctionDecl, "name">
 
 export interface ClassDecl extends Node {
     typeParameters?: Array<TypeParameter>,
-    properties: Array<ClassProperty>,
+    properties: Array<ClassProperty|IndexSignatureDeclaration>,
     methods: Array<ClassMethod>,
     extends?: Reference,
     _constructor?: ClassConstructor,
@@ -251,6 +252,8 @@ export interface ClassDecl extends Node {
 export interface FunctionDecl extends Node {
     signatures: Array<FunctionSignature>
 }
+
+export type ConstructorType = FunctionSignature;
 
 /**
  * `(...parameters) => returnValue`
@@ -275,7 +278,7 @@ export interface IndexSignatureDeclaration {
  * `{ someProperty: type }`
  */
 export interface ObjectLiteral extends BaseType {
-    properties: Array<Property|IndexSignatureDeclaration>,
+    properties: Array<ObjectProperty>,
 }
 
 /**
@@ -311,13 +314,36 @@ export interface ArrayType extends BaseType {
     type: Type
 }
 
-export interface InterfaceProperty {
-    value: Property|IndexSignatureDeclaration|ArrowFunction,
+export interface ObjectProperty {
+    /**
+     * Will only be present if the interface property is a property, for example:
+     * ```
+     * name: type
+     * ```
+     */
+    prop?: Property,
+    /**
+     * Will only be present if the interface property is an index:
+     * ```
+     * [key: type1]: type2
+     * ```
+     */
+    index?: IndexSignatureDeclaration,
+    /**
+     * Will only be present if the interface property is a call signature:
+     * (...params) => value
+     */
+    call?: FunctionSignature,
+    /**
+     * Will only be present if the interface property is a constructor signature
+     * new (...params) => value
+     */
+    construct?: ConstructorType,
     jsDoc?: Array<JSDocData>
 }
 
 export interface InterfaceDecl extends NodeWithManyLOC {
-    properties: Array<InterfaceProperty>,
+    properties: Array<ObjectProperty>,
     typeParameters?: Array<TypeParameter>
     extends?: Array<Type>,
     implements?: Array<Type>

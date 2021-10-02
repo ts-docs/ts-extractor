@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import path from "path";
 import ts from "typescript";
-import { TypescriptExtractor } from ".";
+import { ObjectProperty, TypescriptExtractor } from ".";
 import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON } from "../utils";
-import { AliasedReference, ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, createModuleRef, FunctionParameter, IndexSignatureDeclaration, JSDocData, JSDocTag, Loc, Module, ModuleExport, ObjectLiteral, Property, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
+import { AliasedReference, ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, createModuleRef, FunctionParameter, IndexSignatureDeclaration, JSDocData, JSDocTag, Loc, Module, ModuleExport, ObjectLiteral, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
 
 export class Project {
     repository?: string
@@ -236,7 +236,7 @@ export class Project {
             kind: TypeReferenceKinds.CLASS,
         };
         this.extractor.refs.set(symbol, ref);
-        const properties: Array<ClassProperty> = [];
+        const properties: Array<ClassProperty|IndexSignatureDeclaration> = [];
         const methods = new Map<string, ClassMethod>();
         let constructor;
         for (const member of decl.members) {
@@ -251,9 +251,9 @@ export class Project {
                 }
             }
             if (ts.isIndexSignatureDeclaration(member)) {
-                const prop = this.resolveProperty(member) as ClassProperty;
                 properties.push({
-                    ...prop,
+                    key: member.parameters[0]?.type && this.resolveType(member.parameters[0].type),
+                    type: this.resolveType(member.type),
                     isOptional: Boolean(member.questionToken),
                     isStatic, isReadonly
                 });
@@ -377,10 +377,7 @@ export class Project {
         const loc = [];
         const jsDoc = [];
         for (const decl of (sym.declarations as Array<ts.InterfaceDeclaration>)) {
-            for (const member of (decl.members || [])) properties.push({
-                value: this.resolveProperty(member),
-                jsDoc: this.getJSDocData(member)
-            });
+            for (const member of (decl.members || [])) properties.push(this.resolveObjectProperty(member));
             loc.push(this.getLOC(currentModule, decl));
             const jsdoc = this.getJSDocData(decl);
             if (jsdoc) jsDoc.push(...jsdoc);
@@ -547,6 +544,16 @@ export class Project {
         return ref;
     }
 
+    resolveSymbolOrStr(node: ts.Node, typeArguments?: Array<Type>) : Type {
+        const expSym = this.extractor.checker.getSymbolAtLocation(node);
+        if (!expSym) {
+            const external = this.extractor.refs.findUnnamedExternal(node.getText());
+            if (external) return { kind: TypeKinds.REFERENCE, type: external, typeArguments };
+            return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: node.getText() };
+        }
+        return this.resolveSymbol(expSym, typeArguments);
+    } 
+
     resolveSymbol(sym: ts.Symbol, typeArguments?: Array<Type>) : Reference {
         sym = this.resolveAliasedSymbol(sym);
         if (hasBit(sym.flags, ts.SymbolFlags.TypeParameter)) return {
@@ -590,7 +597,7 @@ export class Project {
         }
         else if (ts.isTypeLiteralNode(type)) {
             return {
-                properties: type.members.map(p => this.resolveProperty(p as ts.PropertySignature)),
+                properties: type.members.map(p => this.resolveObjectProperty(p)),
                 kind: TypeKinds.OBJECT_LITERAL
             } as ObjectLiteral;
         }
@@ -694,6 +701,14 @@ export class Project {
                 kind: TypeKinds.TYPEOF_OPERATOR
             };
         }
+        else if (ts.isConstructorTypeNode(type)) {
+            return {
+                kind: TypeKinds.CONSTRUCTOR_TYPE,
+                returnType: type.type && this.resolveType(type.type),
+                parameters: type.parameters?.map(param => this.resolveParameter(param)),
+                typeParameters: type.typeParameters?.map(param => this.resolveTypeParameters(param))
+            };
+        }
         else switch (type.kind) {
         //@ts-expect-error This shouldn't be erroring.
         case ts.SyntaxKind.LiteralType: return this.resolveType((type as unknown as ts.LiteralType).literal);
@@ -744,39 +759,59 @@ export class Project {
         } as TypeParameter;
     }
 
-    resolveProperty(prop: ts.TypeElement) : Property|IndexSignatureDeclaration|ArrowFunction {
+    resolveObjectProperty(prop: ts.TypeElement) : ObjectProperty {
         if (ts.isPropertySignature(prop)) return {
-            name: prop.name.getText(),
-            type: prop.type && this.resolveType(prop.type),
-            isOptional: Boolean(prop.questionToken),
-            isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword)
+            prop: {
+                name: prop.name.getText(),
+                type: prop.type && this.resolveType(prop.type),
+                isOptional: Boolean(prop.questionToken),
+                isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword)
+            },
+            jsDoc: this.getJSDocData(prop)
         };
         else if (ts.isMethodSignature(prop)) return {
-            name: prop.name.getText(),
-            parameters: prop.parameters.map(p => this.resolveParameter(p)),
-            returnType: prop.type && this.resolveType(prop.type),
-            kind: TypeKinds.ARROW_FUNCTION
+            prop: {
+                name: prop.name.getText(),
+                type: {
+                    kind: TypeKinds.ARROW_FUNCTION,
+                    parameters: prop.parameters?.map(param => this.resolveParameter(param)),
+                    typeParameters: prop.typeParameters?.map(param => this.resolveTypeParameters(param)),
+                    returnType: prop.type && this.resolveType(prop.type)
+                },
+                isOptional: Boolean(prop.questionToken),
+            },
+            jsDoc: this.getJSDocData(prop)
+        };
+        else if (ts.isCallSignatureDeclaration(prop)) return {
+            call: {
+                parameters: prop.parameters?.map(param => this.resolveParameter(param)),
+                typeParameters: prop.typeParameters?.map(param => this.resolveTypeParameters(param)),
+                returnType: prop.type && this.resolveType(prop.type),
+            },
+            jsDoc: this.getJSDocData(prop)
+        };
+        else if (ts.isConstructSignatureDeclaration(prop)) return {
+            construct: {
+                parameters: prop.parameters.map(p => this.resolveParameter(p)),
+                typeParameters: prop.typeParameters?.map(param => this.resolveTypeParameters(param)),
+                returnType: prop.type && this.resolveType(prop.type),
+            },
+            jsDoc: this.getJSDocData(prop)
         };
         else {
             const param = (prop as ts.IndexSignatureDeclaration).parameters[0];
             return {
-                key: param.type && this.resolveType(param.type),
-                type: this.resolveType((prop as ts.IndexSignatureDeclaration).type)
+                index: {
+                    key: param.type && this.resolveType(param.type),
+                    type: this.resolveType((prop as ts.IndexSignatureDeclaration).type)
+                },
+                jsDoc: this.getJSDocData(prop)
             };
         }
     }
 
     resolveHeritage(param: ts.ExpressionWithTypeArguments) : Type {
-        const sym = this.extractor.checker.getSymbolAtLocation(param.expression);
-        if (!sym) return {
-            type: {
-                name: param.expression.getText(),
-                kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN
-            },
-            typeArguments: param.typeArguments?.map(arg => this.resolveType(arg)),
-            kind: TypeKinds.REFERENCE
-        };
-        return this.resolveSymbol(sym, param.typeArguments?.map(arg => this.resolveType(arg)));
+        return this.resolveSymbolOrStr(param.expression, param.typeArguments?.map(arg => this.resolveType(arg)));
     }
 
     resolveParameter(param: ts.ParameterDeclaration) : FunctionParameter {
@@ -792,11 +827,7 @@ export class Project {
     }
 
     resolveExpressionToType(exp: ts.Node) : Type {
-        if (ts.isNewExpression(exp)) {
-            const expSym = this.extractor.checker.getSymbolAtLocation(exp.expression);
-            if (!expSym) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
-            return this.resolveSymbol(expSym, exp.typeArguments?.map(arg => this.resolveType(arg)));
-        }
+        if (ts.isNewExpression(exp)) return this.resolveSymbolOrStr(exp.expression);
         switch (exp.kind) {
         case ts.SyntaxKind.BigIntLiteral:
         case ts.SyntaxKind.PrefixUnaryExpression:
