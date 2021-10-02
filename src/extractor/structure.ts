@@ -132,6 +132,7 @@ export const enum TypeKinds {
     NEVER,
     OBJECT,
     INFER_TYPE,
+    REGEX_LITERAL
 }
 
 export const enum TypeReferenceKinds {

@@ -477,7 +477,7 @@ export class Project {
 
     handleNamespaceDecl(symbol: ts.Symbol, currentModule: Module) : ReferenceType|undefined {
         const firstDecl = symbol.declarations![0]! as ts.ModuleDeclaration;
-        const newMod = createModule(firstDecl.name.text, [...currentModule.path, firstDecl.name.text], false, undefined, true);
+        const newMod = createModule(firstDecl.name.text, [...currentModule.path, firstDecl.name.text], false, this.getLOC(currentModule, firstDecl).sourceFile, true);
         const namespaceLoc = this.getLOC(newMod, firstDecl);
         newMod.repository = namespaceLoc.sourceFile;
         currentModule.modules.set(newMod.name, newMod);
@@ -708,8 +708,11 @@ export class Project {
         case ts.SyntaxKind.AnyKeyword: return { name: "any", kind: TypeKinds.ANY };
         case ts.SyntaxKind.UnknownKeyword: return { name: "unknown", kind: TypeKinds.UNKNOWN };
         case ts.SyntaxKind.BigIntLiteral:
+        case ts.SyntaxKind.PrefixUnaryExpression:
+        case ts.SyntaxKind.PostfixUnaryExpression:
         case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL};
         case ts.SyntaxKind.StringLiteral: return { name: type.getText(), kind: TypeKinds.STRING_LITERAL };
+        case ts.SyntaxKind.RegularExpressionLiteral: return { name: type.getText(), kind: TypeKinds.REGEX_LITERAL }; 
         case ts.SyntaxKind.SymbolKeyword: return { name: "symbol", kind: TypeKinds.SYMBOL };
         case ts.SyntaxKind.BigIntKeyword: return { name: "bigint", kind: TypeKinds.BIGINT };
         case ts.SyntaxKind.NeverKeyword: return { name: "never", kind: TypeKinds.NEVER };
@@ -803,6 +806,7 @@ export class Project {
         case ts.SyntaxKind.TrueKeyword: return { name: "true", kind: TypeKinds.TRUE };
         case ts.SyntaxKind.StringLiteral: return { name: exp.getText(), kind: TypeKinds.STRING_LITERAL };
         case ts.SyntaxKind.NullKeyword: return { name: "null", kind: TypeKinds.NULL };
+        case ts.SyntaxKind.RegularExpressionLiteral: return { name: exp.getText(), kind: TypeKinds.REGEX_LITERAL };
         case ts.SyntaxKind.UndefinedKeyword: return { name: "undefined", kind: TypeKinds.UNDEFINED };
         default: {
             const sym = this.extractor.checker.getSymbolAtLocation(exp);
