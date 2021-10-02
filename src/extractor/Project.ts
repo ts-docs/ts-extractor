@@ -151,8 +151,8 @@ export class Project {
                 let repoPath;
                 if (lastModule.repository) {
                     repoPath = lastModule.repository;
-                    if (skipped.length && !repoPath.split("/").some(p => skipped.includes(p))) {
-                        repoPath += `/${skipped.join("/")}`;
+                    if (skipped.length) {
+                        if (!repoPath.split("/").some(p => skipped.includes(p))) repoPath += `/${skipped.join("/")}`;
                         skipped.length = 0;
                     }
                     repoPath += `/${pathPart}`;
@@ -163,6 +163,7 @@ export class Project {
             } 
             else lastModule = newMod;
         }
+        if (skipped.length) lastModule.repository += `/${skipped.join("/")}`;
         this.extractor.moduleCache[dir] = lastModule;
         return lastModule;
     }
@@ -827,7 +828,7 @@ export class Project {
     }
 
     resolveExpressionToType(exp: ts.Node) : Type {
-        if (ts.isNewExpression(exp)) return this.resolveSymbolOrStr(exp.expression);
+        if (ts.isNewExpression(exp)) return this.resolveSymbolOrStr(exp.expression, exp.typeArguments?.map(arg => this.resolveType(arg)));
         switch (exp.kind) {
         case ts.SyntaxKind.BigIntLiteral:
         case ts.SyntaxKind.PrefixUnaryExpression:
