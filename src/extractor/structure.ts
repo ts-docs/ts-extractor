@@ -253,7 +253,7 @@ export interface FunctionDecl extends Node {
     signatures: Array<FunctionSignature>
 }
 
-export type ConstructorType = FunctionSignature;
+export type ConstructorType = FunctionSignature & BaseType;
 
 /**
  * `(...parameters) => returnValue`
@@ -338,7 +338,7 @@ export interface ObjectProperty {
      * Will only be present if the interface property is a constructor signature
      * new (...params) => value
      */
-    construct?: ConstructorType,
+    construct?: FunctionSignature,
     jsDoc?: Array<JSDocData>
 }
 
