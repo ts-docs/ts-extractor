@@ -1,6 +1,6 @@
 {
   "name": "@ts-docs/extractor",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "description": "Extracts modules, classes, interfaces, enums, type aliases and constants from typescript projects.",
   "main": "dist/index.js",
   "devDependencies": {

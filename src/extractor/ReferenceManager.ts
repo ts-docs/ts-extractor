@@ -70,7 +70,7 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
             if (module.types.some(ty => ty.name === name)) return { kind: TypeReferenceKinds.TYPE_ALIAS, name, path };
             if (module.functions.some(fn => fn.name === name)) return { kind: TypeReferenceKinds.FUNCTION, name, path };
             if (module.constants.some(c => c.name === name)) return { kind: TypeReferenceKinds.CONSTANT, name, path };
-            if (module.modules.has(name)) return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, name, path: project.extractor.settings.entryPoints.length ? [project.module.name, ...path] : path };
+            if (module.modules.has(name)) return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, name, path: project.extractor.settings.entryPoints.length === 1 ? path : [project.module.name, ...path] };
             return;
         }, path);
     }
