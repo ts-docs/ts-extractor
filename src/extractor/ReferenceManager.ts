@@ -62,7 +62,6 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
     } 
 
     findByNameWithModule(name: string, project: Project) : ReferenceType|undefined {
-        const singleEntryPoint = project.extractor.settings.entryPoints.length === 1;
         return project.forEachModule<ReferenceType>(project.module, (module, path) => {
             if (module.name === name) return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, name, path };
             if (module.classes.some(cl => cl.name === name)) return { kind: TypeReferenceKinds.CLASS, name, path };
@@ -71,9 +70,9 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
             if (module.types.some(ty => ty.name === name)) return { kind: TypeReferenceKinds.TYPE_ALIAS, name, path };
             if (module.functions.some(fn => fn.name === name)) return { kind: TypeReferenceKinds.FUNCTION, name, path };
             if (module.constants.some(c => c.name === name)) return { kind: TypeReferenceKinds.CONSTANT, name, path };
-            if (module.modules.has(name)) return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, name, path: singleEntryPoint ? path : [project.module.name, ...path] };
+            if (module.modules.has(name)) return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, name, path };
             return;
-        }, singleEntryPoint ? [] : [project.module.name]);
+        }, project.extractor.settings.entryPoints.length === 1 ? [] : [project.module.name]);
     }
 
     findByPath(name: string, path: Array<string>, project: Project) : ReferenceType|undefined {
