@@ -564,6 +564,7 @@ export class Project {
             if (external) return { kind: TypeKinds.REFERENCE, type: external, typeArguments };
             return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: node.getText() };
         }
+        if (expSym.name === "unknown") return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: node.getText() };
         return this.resolveSymbol(expSym, typeArguments);
     } 
 
