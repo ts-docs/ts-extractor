@@ -16,7 +16,7 @@ export abstract class FileObjectCache {
      * 
      * @returns Return true if the file is cached, false otherwise.
      */
-    abstract has(filename: string, absolute?: string) : boolean;
+    abstract has(filename: string, absolute: string) : boolean;
 }
 
 export interface TypescriptExtractorSettings {

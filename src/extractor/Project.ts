@@ -13,7 +13,10 @@ export class Project {
     module: Module
     extractor: TypescriptExtractor
     baseDir: string
-    private fileCache: Set<string>
+    /**
+     * File cache, if cached or not
+     */
+    private fileCache: Map<string, boolean|undefined>
     private fileExportsCache: Record<string, [Array<ReferenceType>, Array<ModuleExport>]>
     private ignoreNamespaceMembers?: boolean
     private idAcc: number
@@ -33,7 +36,7 @@ export class Project {
         this.module = createModule(name, [], true, this.repository && `${this.repository}/${this.baseDir}`, false);
         if (extractor.settings.entryPoints.length !== 1) this.module.path.push(name);
         this.extractor = extractor;
-        this.fileCache = new Set();
+        this.fileCache = new Map();
         this.fileExportsCache = {};
         this.idAcc = 1;
     }
@@ -52,9 +55,10 @@ export class Project {
         }
         if (!sym || !sym.exports) return;
         if (this.fileCache.has(fileName)) return;
-        this.fileCache.add(fileName);
 
         const isCached = this.extractor.settings.fileCache?.has(removePartOfPath(fileName.split("/"), this.extractor.splitCwd), fileName) || undefined;
+
+        this.fileCache.set(fileName, isCached);
 
         const reExports: Record<string, ModuleExport> = {};
         const exports: Array<AliasedReference> = [];
@@ -570,7 +574,7 @@ export class Project {
             typeArguments,
             type: this.extractor.refs.get(sym)!
         } as Reference;
-        const newlyCreated = this.handleSymbol(sym);
+        const newlyCreated = this.handleSymbol(sym, undefined, this.fileCache.get(sym.declarations?.[0]?.getSourceFile().fileName || ""));
         if (newlyCreated) return { kind: TypeKinds.REFERENCE, typeArguments, type: newlyCreated };
         const possiblyExternal = this.extractor.refs.findExternal(sym);
         if (possiblyExternal) return { kind: TypeKinds.REFERENCE, typeArguments, type: possiblyExternal };
