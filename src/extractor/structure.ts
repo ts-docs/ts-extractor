@@ -59,7 +59,8 @@ export interface Node {
     /**
      * Only classes, interfaces, enums, functions, types and constants have an ID, and they only have it if there is another thing of the same type with the same name.
      */
-    id?: number
+    id?: number,
+    isCached?: boolean
 }
 
 export type NamelessNode = Omit<Node, "name">;
@@ -70,7 +71,8 @@ export type NodeWithManyLOC = {
     jsDoc?: Array<JSDocData>,
     isExported?: boolean
     loc: Array<Loc>,
-    id?: number
+    id?: number,
+    isCached?: boolean
 }
 
 export function createModule(name: string, path: Array<string>, isGlobal?: boolean, repository?: string, isNamespace?: boolean) : Module {

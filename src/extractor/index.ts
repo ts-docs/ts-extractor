@@ -8,6 +8,16 @@ import { Project } from "./Project";
 import { ExternalReference, ReferenceManager } from "./ReferenceManager";
 import { Module } from "./structure";
 
+export abstract class FileObjectCache {
+    /**
+     * 
+     * @param filename The path to the file. It's going to be relative to the root of the project.
+     * @param absolute The absolute path to the file.
+     * 
+     * @returns Return true if the file is cached, false otherwise.
+     */
+    abstract has(filename: string, absolute?: string) : boolean;
+}
 
 export interface TypescriptExtractorSettings {
     /**
@@ -33,7 +43,12 @@ export interface TypescriptExtractorSettings {
     /**
      * Change the cwd (current working directory)
      */
-    cwd?: string
+    cwd?: string,
+    /**
+     * A class which implements the abstract class [[FileObjectCache]]. If the [[FileObjectCache.has() as has]] function returns `true`, then all items 
+     * in that file will be marked with "isCached" set to true.
+     */
+    fileCache?: FileObjectCache
 }
 
 export class TypescriptExtractor {
@@ -42,6 +57,7 @@ export class TypescriptExtractor {
     program!: ts.Program
     refs: ReferenceManager
     moduleCache: Record<string, Module>
+    splitCwd!: Array<string>
     constructor(settings: TypescriptExtractorSettings) {
         this.settings = settings;
         this.refs = new ReferenceManager(settings.externals);
@@ -50,6 +66,7 @@ export class TypescriptExtractor {
 
     run() : Array<Project> {
         const cwd = this.settings.cwd || process.cwd();
+        this.splitCwd = cwd.split(path.sep);
         let tsconfig: ts.CompilerOptions | undefined;
         const tsconfigPath = ts.findConfigFile(cwd, (file) => fs.existsSync(file), "tsconfig.json");
         if (tsconfigPath) {
@@ -81,12 +98,10 @@ export class TypescriptExtractor {
 
         this.checker = this.program.getTypeChecker();
         const projects = [];
-        const base = cwd.split(path.sep);
         for (const entryPoint of this.settings.entryPoints) {
             const sourceFile = this.program.getSourceFile(path.isAbsolute(entryPoint) ? entryPoint : path.join(cwd, entryPoint));
             if (!sourceFile) continue;
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            const project = new Project({folderPath: removePartOfEndOfPath(sourceFile.fileName, base), extractor: this, packageJSON: packageJSONs.get(entryPoint)! });
+            const project = new Project({ folderPath: removePartOfEndOfPath(sourceFile.fileName, this.splitCwd), extractor: this, packageJSON: packageJSONs.get(entryPoint)! });
             projects.push(project);
             project.visitor(sourceFile, project.module, true);
         }

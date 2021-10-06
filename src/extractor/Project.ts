@@ -2,7 +2,7 @@
 import path from "path";
 import ts from "typescript";
 import { ObjectProperty, TypescriptExtractor } from ".";
-import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON } from "../utils";
+import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON, removePartOfPath } from "../utils";
 import { AliasedReference, ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, createModuleRef, FunctionParameter, IndexSignatureDeclaration, JSDocData, JSDocTag, Loc, Module, ModuleExport, ObjectLiteral, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
 
 export class Project {
@@ -19,7 +19,7 @@ export class Project {
     private idAcc: number
     constructor({folderPath, extractor, packageJSON}: {
         folderPath: Array<string>, 
-        extractor: TypescriptExtractor
+        extractor: TypescriptExtractor,
         packageJSON: PackageJSON,
     }) {
         folderPath.pop(); // Removes the file name
@@ -38,17 +38,24 @@ export class Project {
         this.idAcc = 1;
     }
 
-    visitor(sourceFile: ts.SourceFile|ts.Symbol, currentModule?: Module, addToExports = false) : void {
+    visitor(sourceFile: ts.SourceFile|ts.Symbol, currentModule: Module, addToExports = false) : void {
         let sym;
+        let fileName;
         if ("fileName" in sourceFile) {
             if (this.extractor.program.isSourceFileFromExternalLibrary(sourceFile) || this.extractor.program.isSourceFileDefaultLibrary(sourceFile)) return;
+            fileName = sourceFile.fileName;
             sym = this.extractor.checker.getSymbolAtLocation(sourceFile);
         }
-        else sym = sourceFile;
+        else {
+            sym = sourceFile;
+            fileName = sym.name.slice(1, -1);
+        }
         if (!sym || !sym.exports) return;
-        if (this.fileCache.has(sym.name)) return;
-        this.fileCache.add(sym.name);
-        if (!currentModule) currentModule = this.getOrCreateModule(sym.name);
+        if (this.fileCache.has(fileName)) return;
+        this.fileCache.add(fileName);
+
+        const isCached = this.extractor.settings.fileCache?.has(removePartOfPath(fileName.split("/"), this.extractor.splitCwd), fileName) || undefined;
+
         const reExports: Record<string, ModuleExport> = {};
         const exports: Array<AliasedReference> = [];
         // @ts-expect-error You should be able to do that
@@ -79,12 +86,11 @@ export class Project {
                     const alias = val.name !== aliased.name ? val.name : undefined;
                     const aliasedRef = this.extractor.refs.get(aliased);
                     if (!aliasedRef) {
-                        const realMod = this.getOrCreateModule(aliased.name);
-                        const fileExports = this.fileExportsCache[aliased.name];
-                        if (realMod.reExports.some(ex => ex.alias === alias)) reExports[val.name] = { module: createModuleRef(realMod), reExportsReExport: alias, references: [] };
+                        const fileExports = this.fileExportsCache[source.fileName];
+                        if (mod.reExports.some(ex => ex.alias === alias)) reExports[val.name] = { module: createModuleRef(mod), reExportsReExport: alias, references: [] };
                         else {
                             if (!fileExports) continue;
-                            reExports[val.name] = { alias, module: createModuleRef(realMod), references: fileExports[0] };
+                            reExports[val.name] = { alias, module: createModuleRef(mod), references: fileExports[0] };
                         }
                         continue;
                     }
@@ -113,14 +119,14 @@ export class Project {
                 // export ...
                 // Always go to "exports"
                 else {
-                    const sym = this.handleSymbol(val, currentModule);
+                    const sym = this.handleSymbol(val, currentModule, isCached);
                     if (sym) exports.push(sym);
                 }
             }
         }
         const reExportsArr = Object.values(reExports);
-        this.fileExportsCache[sym.name] = [exports, reExportsArr];
-        if (addToExports || sym.name.endsWith("index\"")) {
+        this.fileExportsCache[fileName] = [exports, reExportsArr];
+        if (addToExports || fileName.endsWith("index")) {
             currentModule.exports.push(...exports);
             currentModule.reExports.push(...reExportsArr);
         }
@@ -178,7 +184,7 @@ export class Project {
         return undefined;
     }
 
-    handleSymbol(val: ts.Symbol, currentModule?: Module) : ReferenceType | undefined {
+    handleSymbol(val: ts.Symbol, currentModule?: Module, isCached?: boolean) : ReferenceType | undefined {
         if (!val.declarations || !val.declarations.length) return;
         if (this.extractor.refs.has(val)) return this.extractor.refs.get(val);
 
@@ -197,38 +203,28 @@ export class Project {
         }
 
         // TODO?: A symbol can both be an interface/type alias and a variable/function. 
-        if (hasBit(val.flags, ts.SymbolFlags.Class)) return this.handleClassDecl(val, currentModule);
-        else if (hasBit(val.flags, ts.SymbolFlags.Interface)) return this.handleInterfaceDecl(val, currentModule);
-        else if (hasBit(val.flags, ts.SymbolFlags.Enum)) return this.handleEnumDecl(val, currentModule);
-        else if (hasBit(val.flags, ts.SymbolFlags.TypeAlias)) return this.handleTypeAliasDecl(val, currentModule);
-        else if (hasBit(val.flags, ts.SymbolFlags.Module)) return this.handleNamespaceDecl(val, currentModule);
-        else if (hasBit(val.flags, ts.SymbolFlags.Variable) && !hasBit(val.flags, ts.SymbolFlags.FunctionScopedVariable)) return this.handleVariableDecl(val, currentModule);
-        else if (hasBit(val.flags, ts.SymbolFlags.Function)) return this.handleFunctionDecl(val, currentModule);
+        if (hasBit(val.flags, ts.SymbolFlags.Class)) return this.handleClassDecl(val, currentModule, isCached);
+        else if (hasBit(val.flags, ts.SymbolFlags.Interface)) return this.handleInterfaceDecl(val, currentModule, isCached);
+        else if (hasBit(val.flags, ts.SymbolFlags.Enum)) return this.handleEnumDecl(val, currentModule, isCached);
+        else if (hasBit(val.flags, ts.SymbolFlags.TypeAlias)) return this.handleTypeAliasDecl(val, currentModule, isCached);
+        else if (hasBit(val.flags, ts.SymbolFlags.Module)) return this.handleNamespaceDecl(val, currentModule, isCached);
+        else if (hasBit(val.flags, ts.SymbolFlags.Variable) && !hasBit(val.flags, ts.SymbolFlags.FunctionScopedVariable)) return this.handleVariableDecl(val, currentModule, isCached);
+        else if (hasBit(val.flags, ts.SymbolFlags.Function)) return this.handleFunctionDecl(val, currentModule, isCached);
         else if (hasBit(val.flags, ts.SymbolFlags.EnumMember)) {
             //@ts-expect-error Private property
             const parent = val.parent;
-            if (!this.extractor.refs.has(parent)) this.handleEnumDecl(parent, currentModule);
+            if (!this.extractor.refs.has(parent)) this.handleEnumDecl(parent, currentModule, isCached);
             return this.extractor.refs.get(val);
         }
         else {
             const aliased = this.resolveAliasedSymbol(val);
             if (this.extractor.refs.has(aliased)) return this.extractor.refs.get(aliased);
-            if (aliased.declarations && aliased.declarations.length) {
-                const decl = aliased.declarations![0];
-                let name: ts.Symbol|string = aliased;
-                let importedFrom;
-                if (ts.isImportClause(decl)) importedFrom = (decl.parent.moduleSpecifier as ts.StringLiteral).text;
-                else if (ts.isImportSpecifier(decl)) {
-                    importedFrom = (decl.parent.parent.parent.moduleSpecifier as ts.StringLiteral).text;
-                    if (decl.propertyName) name = decl.propertyName.text;
-                }
-                if (importedFrom) return this.extractor.refs.findExternal(name, importedFrom);
-            }
+            if (aliased.declarations && aliased.declarations.length) return this.extractor.refs.findExternal(aliased);
             return;
         }
     }
 
-    handleClassDecl(symbol: ts.Symbol, currentModule: Module) : ReferenceType | undefined {
+    handleClassDecl(symbol: ts.Symbol, currentModule: Module, isCached?: boolean) : ReferenceType | undefined {
         const decl = symbol.declarations![0] as ts.ClassDeclaration;
         const name = symbol.name;
         const ref: ReferenceType = {
@@ -353,7 +349,8 @@ export class Project {
             loc: this.getLOC(currentModule, decl),
             jsDoc: this.getJSDocData(decl),
             isAbstract: decl.modifiers && decl.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
-            _constructor: constructor
+            _constructor: constructor,
+            isCached
         };
         if (decl.heritageClauses) {
             const extendsClause = decl.heritageClauses.find(clause => clause.token === ts.SyntaxKind.ExtendsKeyword);
@@ -366,7 +363,7 @@ export class Project {
         return ref;
     }
 
-    handleInterfaceDecl(sym: ts.Symbol, currentModule: Module) : ReferenceType | undefined {
+    handleInterfaceDecl(sym: ts.Symbol, currentModule: Module, isCached?: boolean) : ReferenceType | undefined {
         const firstDecl = sym.declarations!.find(decl => ts.isInterfaceDeclaration(decl)) as ts.InterfaceDeclaration;
         const ref: ReferenceType = {
             name: sym.name,
@@ -400,12 +397,13 @@ export class Project {
             properties,
             jsDoc,
             id,
-            typeParameters: firstDecl.typeParameters && firstDecl.typeParameters.map(p => this.resolveTypeParameters(p))
+            typeParameters: firstDecl.typeParameters && firstDecl.typeParameters.map(p => this.resolveTypeParameters(p)),
+            isCached: sym.declarations!.length === 1 ? true : undefined
         });
         return ref;
     }
 
-    handleEnumDecl(sym: ts.Symbol, currentModule: Module) : ReferenceType | undefined {
+    handleEnumDecl(sym: ts.Symbol, currentModule: Module, isCached?: boolean) : ReferenceType | undefined {
         const firstDecl = sym.declarations![0];
         const ref: ReferenceType = {
             name: sym.name,
@@ -447,12 +445,13 @@ export class Project {
             loc,
             jsDoc,
             members,
-            id
+            id,
+            isCached: isCached && sym.declarations!.length === 1 ? true : undefined
         });
         return ref;
     }
 
-    handleTypeAliasDecl(sym: ts.Symbol, currentModule: Module) : ReferenceType | undefined {
+    handleTypeAliasDecl(sym: ts.Symbol, currentModule: Module, isCached?: boolean) : ReferenceType | undefined {
         const decl = sym.declarations!.find(decl => ts.isTypeAliasDeclaration(decl)) as ts.TypeAliasDeclaration;
         const ref: ReferenceType = {
             name: sym.name,
@@ -468,12 +467,13 @@ export class Project {
             typeParameters: decl.typeParameters?.map(param => this.resolveTypeParameters(param)),
             loc: this.getLOC(currentModule, decl),
             jsDoc: this.getJSDocData(decl),
-            id
+            id,
+            isCached
         });
         return ref;
     }
 
-    handleNamespaceDecl(symbol: ts.Symbol, currentModule: Module) : ReferenceType|undefined {
+    handleNamespaceDecl(symbol: ts.Symbol, currentModule: Module, isCached?: boolean) : ReferenceType|undefined {
         const firstDecl = symbol.declarations![0]! as ts.ModuleDeclaration;
         const newMod = createModule(firstDecl.name.text, [...currentModule.path, firstDecl.name.text], false, this.getLOC(currentModule, firstDecl).sourceFile, true);
         const namespaceLoc = this.getLOC(newMod, firstDecl);
@@ -486,16 +486,17 @@ export class Project {
         };
         this.extractor.refs.set(symbol, ref);
         this.ignoreNamespaceMembers = true;
+        const areChildrenCached = isCached && symbol.declarations!.length === 1 ? true : undefined;
         // @ts-expect-error You should be able to do that
         for (const [, element] of symbol.exports) {
-            const sym = this.handleSymbol(element, newMod);
+            const sym = this.handleSymbol(element, newMod, areChildrenCached);
             if (sym) newMod.exports.push(sym);
         }
         this.ignoreNamespaceMembers = false;
         return ref;
     }
 
-    handleVariableDecl(sym: ts.Symbol, currentModule: Module) : ReferenceType | undefined {
+    handleVariableDecl(sym: ts.Symbol, currentModule: Module, isCached?: boolean) : ReferenceType | undefined {
         const decl = sym.declarations!.find(decl => ts.isVariableDeclaration(decl)) as ts.VariableDeclaration;
         const ref: ReferenceType = {
             name: sym.name,
@@ -512,12 +513,13 @@ export class Project {
             loc: this.getLOC(currentModule, decl),
             jsDoc: this.getJSDocData(decl),
             content: text && (text.length > maxLen) ? text.slice(0, maxLen) : text,
-            id
+            id,
+            isCached
         });
         return ref;
     }
 
-    handleFunctionDecl(sym: ts.Symbol, currentModule: Module) : ReferenceType | undefined {
+    handleFunctionDecl(sym: ts.Symbol, currentModule: Module, isCached?: boolean) : ReferenceType | undefined {
         const lastDecl = sym.declarations![sym.declarations!.length - 1];
         const ref: ReferenceType = {
             name: sym.name,
@@ -540,7 +542,8 @@ export class Project {
             name: sym.name,
             signatures,
             loc: this.getLOC(currentModule, lastDecl),
-            id
+            id,
+            isCached
         });
         return ref;
     }
@@ -569,25 +572,13 @@ export class Project {
         } as Reference;
         const newlyCreated = this.handleSymbol(sym);
         if (newlyCreated) return { kind: TypeKinds.REFERENCE, typeArguments, type: newlyCreated };
+        const possiblyExternal = this.extractor.refs.findExternal(sym);
+        if (possiblyExternal) return { kind: TypeKinds.REFERENCE, typeArguments, type: possiblyExternal };
         return { kind: TypeKinds.REFERENCE, typeArguments, type: { kind: TypeReferenceKinds.UNKNOWN, name: sym.name }};
     }
 
     resolveType(type: ts.Node) : Type {
-        if (ts.isTypeReferenceNode(type)) {
-            const symbol = this.extractor.checker.getSymbolAtLocation(type.typeName);
-            const typeArguments = type.typeArguments?.map(arg => this.resolveType(arg));
-            if (symbol) {
-                if (symbol.name === "unknown") return { kind: TypeKinds.REFERENCE, typeArguments, type: { kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN, name: type.typeName.getText() }};
-                return this.resolveSymbol(symbol, typeArguments);
-            }
-            const externalMaybe = this.extractor.refs.findUnnamedExternal(type.typeName.getText());
-            if (externalMaybe) return {
-                kind: TypeKinds.REFERENCE,
-                typeArguments,
-                type: externalMaybe
-            };
-            return { kind: TypeKinds.REFERENCE, typeArguments, type: { name: type.typeName.getText(), kind: TypeReferenceKinds.STRINGIFIED_UNKNOWN } };
-        }
+        if (ts.isTypeReferenceNode(type)) return this.resolveSymbolOrStr(type.typeName, type.typeArguments?.map(arg => this.resolveType(arg)));
         else if (ts.isFunctionTypeNode(type)) {
             return {
                 typeParameters: type.typeParameters && type.typeParameters.map(p => this.resolveTypeParameters(p)),

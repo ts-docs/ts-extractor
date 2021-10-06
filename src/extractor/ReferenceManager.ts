@@ -5,10 +5,9 @@ import { Module, ReferenceType, TypeReferenceKinds } from "./structure";
 
 export interface ExternalReference {
     /**
-     * The symbol parameter is usually a string when the reference is global, or when the import is aliased (`import {A as B} from "..."`)
      * The source is undefined only when the thing is not imported, which means it's a global object. (Array, Promise, etc.)
      */
-    run: (symbol: ts.Symbol|string, source?: string) => {link: string, displayName?: string, name?: string}|undefined,
+    run: (symbol: string, source?: string) => {link: string, displayName?: string, name?: string}|undefined,
     /**
      * If this property is provided to the reference manager, it's going to parse the import module name and if the first part of it matches the baseName, the 
      * run function will be called.
@@ -32,26 +31,35 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
         }
     }
 
-    findUnnamedExternal(symbol: ts.Symbol|string, source?: string) : ReferenceType|undefined {
+    findUnnamedExternal(symbol: string, source?: string) : ReferenceType|undefined {
         for (const external of this.unnamedExternals) {
             const res = external.run(symbol, source);
-            if (res) return { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeReferenceKinds.EXTERNAL, ...res };
+            if (res) return { name: symbol, kind: TypeReferenceKinds.EXTERNAL, ...res };
         }
         return;
     }
 
-    findExternal(symbol: ts.Symbol|string, source?: string) : ReferenceType|undefined {
+    findExternal(symbol: ts.Symbol, source?: string) : ReferenceType|undefined {
+        let name = symbol.name;
+        if (!source && symbol.declarations && symbol.declarations.length) {
+            const decl = symbol.declarations[0];
+            if (ts.isImportClause(decl)) source = (decl.parent.moduleSpecifier as ts.StringLiteral).text;
+            else if (ts.isImportSpecifier(decl)) {
+                source = (decl.parent.parent.parent.moduleSpecifier as ts.StringLiteral).text;
+                if (decl.propertyName) name = decl.propertyName.text;
+            }
+        }
         if (source) {
             const path = source.split("/");
             const first = path.shift();
             if (!first) return;
             if (this.namedExternals.has(first)) {
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                const res = this.namedExternals.get(first)!.run(symbol, source);
+                const res = this.namedExternals.get(first)!.run(name, source);
                 return { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeReferenceKinds.EXTERNAL, ...res };
             }
         }
-        return this.findUnnamedExternal(symbol, source);
+        return this.findUnnamedExternal(name, source);
     }
 
     findByName(name: string) : ReferenceType|undefined {
