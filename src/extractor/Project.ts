@@ -56,7 +56,7 @@ export class Project {
         if (!sym || !sym.exports) return;
         if (this.fileCache.has(fileName)) return;
 
-        const isCached = this.extractor.settings.fileCache?.has(removePartOfPath(fileName.split("/"), this.extractor.splitCwd), fileName) || undefined;
+        const isCached = this.extractor.settings.fileCache?.has(removePartOfPath(fileName.split("/"), this.extractor.splitCwd), fileName) || false;
 
         this.fileCache.set(fileName, isCached);
 
@@ -195,13 +195,18 @@ export class Project {
         if (!currentModule) {
             const origin = val.declarations[0].getSourceFile();
             if (this.extractor.program.isSourceFileFromExternalLibrary(origin) || this.extractor.program.isSourceFileDefaultLibrary(origin)) return this.extractor.refs.findExternal(val);
+            const fileName = origin.fileName;
             currentModule = this.getOrCreateModule(origin.fileName);
+            if (this.fileCache.has(origin.fileName)) isCached = this.fileCache.get(origin.fileName);
+            else {
+                isCached = this.extractor.settings.fileCache?.has(removePartOfPath(fileName.split("/"), this.extractor.splitCwd), fileName);
+            } 
         }
 
         if (!this.ignoreNamespaceMembers && ts.isModuleBlock(val.declarations[0].parent)) {
             const namespaceSym = this.extractor.checker.getSymbolAtLocation(val.declarations[0].parent.parent.name);
             if (namespaceSym) {
-                if (!this.extractor.refs.has(namespaceSym)) this.handleNamespaceDecl(namespaceSym, currentModule);
+                if (!this.extractor.refs.has(namespaceSym)) this.handleNamespaceDecl(namespaceSym, currentModule, isCached);
                 return this.extractor.refs.get(val);
             }
         }
@@ -402,7 +407,7 @@ export class Project {
             jsDoc,
             id,
             typeParameters: firstDecl.typeParameters && firstDecl.typeParameters.map(p => this.resolveTypeParameters(p)),
-            isCached: sym.declarations!.length === 1 ? true : undefined
+            isCached: (isCached && sym.declarations!.length === 1) ? true : undefined
         });
         return ref;
     }
@@ -450,7 +455,7 @@ export class Project {
             jsDoc,
             members,
             id,
-            isCached: isCached && sym.declarations!.length === 1 ? true : undefined
+            isCached: (isCached && sym.declarations!.length === 1) ? true : undefined
         });
         return ref;
     }
@@ -574,7 +579,7 @@ export class Project {
             typeArguments,
             type: this.extractor.refs.get(sym)!
         } as Reference;
-        const newlyCreated = this.handleSymbol(sym, undefined, this.fileCache.get(sym.declarations?.[0]?.getSourceFile().fileName || ""));
+        const newlyCreated = this.handleSymbol(sym, undefined);
         if (newlyCreated) return { kind: TypeKinds.REFERENCE, typeArguments, type: newlyCreated };
         const possiblyExternal = this.extractor.refs.findExternal(sym);
         if (possiblyExternal) return { kind: TypeKinds.REFERENCE, typeArguments, type: possiblyExternal };
