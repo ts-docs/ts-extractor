@@ -40,8 +40,9 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
     }
 
     findExternal(symbol: ts.Symbol, source?: string) : ReferenceType|undefined {
+        if (this.has(symbol)) return this.get(symbol);
         let name = symbol.name;
-        if (!source && symbol.declarations && symbol.declarations.length) {
+        if (!source && symbol.declarations && symbol.declarations.length && !symbol.declarations[0].getSourceFile().isDeclarationFile) {
             const decl = symbol.declarations[0];
             if (ts.isImportClause(decl)) source = (decl.parent.moduleSpecifier as ts.StringLiteral).text;
             else if (ts.isImportSpecifier(decl)) {
@@ -52,14 +53,16 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
         if (source) {
             const path = source.split("/");
             const first = path.shift();
-            if (!first) return;
-            if (this.namedExternals.has(first)) {
+            if (first && this.namedExternals.has(first)) {
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                const res = this.namedExternals.get(first)!.run(name, source);
-                return { name: typeof symbol === "string" ? symbol:symbol.name, kind: TypeReferenceKinds.EXTERNAL, ...res };
+                const res = { name, kind: TypeReferenceKinds.EXTERNAL, ...this.namedExternals.get(first)!.run(name, source) };
+                this.set(symbol, res);
+                return res;
             }
         }
-        return this.findUnnamedExternal(name, source);
+        const unnamed = this.findUnnamedExternal(name, source);
+        if (unnamed) this.set(symbol, unnamed);
+        return unnamed;
     }
 
     findByName(name: string) : ReferenceType|undefined {

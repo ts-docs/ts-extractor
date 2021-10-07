@@ -560,6 +560,7 @@ export class Project {
     resolveSymbolOrStr(node: ts.Node, typeArguments?: Array<Type>) : Type {
         const expSym = this.extractor.checker.getSymbolAtLocation(node);
         if (!expSym) {
+            if (!node.getSourceFile()) return { kind: TypeKinds.UNKNOWN };
             const external = this.extractor.refs.findUnnamedExternal(node.getText());
             if (external) return { kind: TypeKinds.REFERENCE, type: external, typeArguments };
             return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: node.getText() };
@@ -588,7 +589,10 @@ export class Project {
     }
 
     resolveType(type: ts.Node) : Type {
-        if (ts.isTypeReferenceNode(type)) return this.resolveSymbolOrStr(type.typeName, type.typeArguments?.map(arg => this.resolveType(arg)));
+        if (ts.isTypeReferenceNode(type)) {
+            if ("symbol" in type.typeName) return this.resolveSymbol((type.typeName as Record<string, ts.Symbol>).symbol, type.typeArguments?.map(arg => this.resolveType(arg)));
+            return this.resolveSymbolOrStr(type.typeName, type.typeArguments?.map(arg => this.resolveType(arg)));
+        }
         else if (ts.isFunctionTypeNode(type)) {
             return {
                 typeParameters: type.typeParameters && type.typeParameters.map(p => this.resolveTypeParameters(p)),
@@ -696,10 +700,8 @@ export class Project {
             };
         }
         else if (ts.isTypeQueryNode(type)) {
-            const sym = this.extractor.checker.getSymbolAtLocation(type.exprName);
-            if (!sym) return { kind: TypeKinds.UNKNOWN };
             return {
-                type: this.resolveSymbol(sym),
+                type: this.resolveSymbolOrStr(type.exprName),
                 kind: TypeKinds.TYPEOF_OPERATOR
             };
         }
@@ -744,13 +746,21 @@ export class Project {
         if (!sig) return;
         const type = sig.getReturnType();
         const sym = type.getSymbol();
-        if (!sym) return;
         //@ts-expect-error Internal API
-        return this.resolveSymbol(sym, type.resolvedTypeArguments && type.resolvedTypeArguments.map(t => {
+        const typeArguments = type.resolvedTypeArguments ? type.resolvedTypeArguments.map(t => {
             const symbol = t.getSymbol();
             if (!symbol) return { kind: TypeKinds.ANY, name: "any" };
             return this.resolveSymbol(symbol);
-        }));
+        }) : undefined;
+        if (!sym) {
+            const typeNode = this.extractor.checker.typeToTypeNode(type, undefined, undefined);
+            if (typeNode) {
+                const res = this.resolveType(typeNode);
+                return res;
+            }
+            return;
+        };
+        return this.resolveSymbol(sym, typeArguments);
     }
 
     resolveTypeParameters(generic: ts.TypeParameterDeclaration) : TypeParameter {

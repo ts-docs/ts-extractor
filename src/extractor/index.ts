@@ -48,7 +48,11 @@ export interface TypescriptExtractorSettings {
      * A class which implements the abstract class [[FileObjectCache]]. If the [[FileObjectCache.has() as has]] function returns `true`, then all items 
      * in that file will be marked with "isCached" set to true.
      */
-    fileCache?: FileObjectCache
+    fileCache?: FileObjectCache,
+    /**
+     * A custom reference manager instance
+     */
+    refs?: ReferenceManager
 }
 
 export class TypescriptExtractor {
@@ -60,7 +64,7 @@ export class TypescriptExtractor {
     splitCwd!: Array<string>
     constructor(settings: TypescriptExtractorSettings) {
         this.settings = settings;
-        this.refs = new ReferenceManager(settings.externals);
+        this.refs = settings.refs || new ReferenceManager(settings.externals);
         this.moduleCache = {};
     }
 
