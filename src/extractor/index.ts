@@ -6,7 +6,7 @@ import { findPackageJSON, PackageJSON, removePartOfEndOfPath } from "../utils";
 import { createHost } from "./Host";
 import { Project } from "./Project";
 import { ExternalReference, ReferenceManager } from "./ReferenceManager";
-import { Module } from "./structure";
+import { Module, ModuleExport, ReferenceType } from "./structure";
 
 export abstract class FileObjectCache {
     /**
@@ -61,11 +61,15 @@ export class TypescriptExtractor {
     program!: ts.Program
     refs: ReferenceManager
     moduleCache: Record<string, Module>
+    fileCache: Map<string, boolean|undefined>
+    fileExportsCache: Record<string, [Array<ReferenceType>, Array<ModuleExport>]>
     splitCwd!: Array<string>
     constructor(settings: TypescriptExtractorSettings) {
         this.settings = settings;
         this.refs = settings.refs || new ReferenceManager(settings.externals);
         this.moduleCache = {};
+        this.fileCache = new Map();
+        this.fileExportsCache = {};
     }
 
     run() : Array<Project> {

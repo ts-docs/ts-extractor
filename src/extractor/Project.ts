@@ -13,11 +13,6 @@ export class Project {
     module: Module
     extractor: TypescriptExtractor
     baseDir: string
-    /**
-     * File cache, if cached or not
-     */
-    private fileCache: Map<string, boolean|undefined>
-    private fileExportsCache: Record<string, [Array<ReferenceType>, Array<ModuleExport>]>
     private ignoreNamespaceMembers?: boolean
     private idAcc: number
     constructor({folderPath, extractor, packageJSON}: {
@@ -36,8 +31,6 @@ export class Project {
         this.module = createModule(name, [], true, this.repository && `${this.repository}/${this.baseDir}`, false);
         if (extractor.settings.entryPoints.length !== 1) this.module.path.push(name);
         this.extractor = extractor;
-        this.fileCache = new Map();
-        this.fileExportsCache = {};
         this.idAcc = 1;
     }
 
@@ -54,11 +47,12 @@ export class Project {
             fileName = sym.name.slice(1, -1);
         }
         if (!sym || !sym.exports) return;
-        if (this.fileCache.has(fileName)) return;
+        if (this.extractor.fileCache.has(fileName)) return;
 
         const isCached = this.extractor.settings.fileCache?.has(removePartOfPath(fileName.split("/"), this.extractor.splitCwd), fileName) || false;
+        
 
-        this.fileCache.set(fileName, isCached);
+        this.extractor.fileCache.set(fileName, isCached);
 
         const reExports: Record<string, ModuleExport> = {};
         const exports: Array<AliasedReference> = [];
@@ -90,7 +84,7 @@ export class Project {
                     const alias = val.name !== aliased.name ? val.name : undefined;
                     const aliasedRef = this.extractor.refs.get(aliased);
                     if (!aliasedRef) {
-                        const fileExports = this.fileExportsCache[source.fileName];
+                        const fileExports = this.extractor.fileExportsCache[source.fileName];
                         if (mod.reExports.some(ex => ex.alias === alias)) reExports[val.name] = { module: createModuleRef(mod), reExportsReExport: alias, references: [] };
                         else {
                             if (!fileExports) continue;
@@ -112,7 +106,7 @@ export class Project {
                     if (!aliased.declarations || !aliased.declarations.length) continue;
                     const mod = this.getOrCreateModule(aliased.name);
                     this.visitor(aliased, mod);
-                    const exportsFromMod = this.fileExportsCache[aliased.name];
+                    const exportsFromMod = this.extractor.fileExportsCache[aliased.name];
                     if (!exportsFromMod) continue;
                     reExports[aliased.name] = {
                         alias: namespaceName,
@@ -129,7 +123,7 @@ export class Project {
             }
         }
         const reExportsArr = Object.values(reExports);
-        this.fileExportsCache[fileName] = [exports, reExportsArr];
+        this.extractor.fileExportsCache[fileName] = [exports, reExportsArr];
         if (addToExports || fileName.endsWith("index")) {
             currentModule.exports.push(...exports);
             currentModule.reExports.push(...reExportsArr);
@@ -191,13 +185,12 @@ export class Project {
     handleSymbol(val: ts.Symbol, currentModule?: Module, isCached?: boolean) : ReferenceType | undefined {
         if (!val.declarations || !val.declarations.length) return;
         if (this.extractor.refs.has(val)) return this.extractor.refs.get(val);
-
         if (!currentModule) {
             const origin = val.declarations[0].getSourceFile();
             if (this.extractor.program.isSourceFileFromExternalLibrary(origin) || this.extractor.program.isSourceFileDefaultLibrary(origin)) return this.extractor.refs.findExternal(val);
             const fileName = origin.fileName;
             currentModule = this.getOrCreateModule(origin.fileName);
-            if (this.fileCache.has(origin.fileName)) isCached = this.fileCache.get(origin.fileName);
+            if (this.extractor.fileCache.has(origin.fileName)) isCached = this.extractor.fileCache.get(origin.fileName);
             else {
                 isCached = this.extractor.settings.fileCache?.has(removePartOfPath(fileName.split("/"), this.extractor.splitCwd), fileName);
             } 
