@@ -53,7 +53,11 @@ export interface TypescriptExtractorSettings {
     /**
      * A custom reference manager instance
      */
-    refs?: ReferenceManager
+    refs?: ReferenceManager,
+    /**
+     * Path to which tsconfig.json file to use
+     */
+    tsconfig?: string
 }
 
 export class TypescriptExtractor {
@@ -77,11 +81,17 @@ export class TypescriptExtractor {
         const cwd = this.settings.cwd || process.cwd();
         this.splitCwd = cwd.split(path.sep);
         let tsconfig: ts.CompilerOptions | undefined;
-        const tsconfigPath = ts.findConfigFile(cwd, (file) => fs.existsSync(file), "tsconfig.json");
-        if (tsconfigPath) {
-            const configRes = ts.parseConfigFileTextToJson("tsconfig.json", fs.readFileSync(tsconfigPath, "utf-8"));
-            if (configRes.error) throw new Error(ts.flattenDiagnosticMessageText(configRes.error.messageText, "\n"));
-            tsconfig = ts.convertCompilerOptionsFromJson(configRes.config.compilerOptions, cwd).options;
+        if (this.settings.tsconfig) {
+            const info = ts.parseConfigFileTextToJson("tsconfig.json", fs.readFileSync(path.join(cwd, this.settings.tsconfig), "utf-8"));
+            if (info.error) throw new Error(ts.flattenDiagnosticMessageText(info.error.messageText, "\n"));
+            tsconfig = ts.convertCompilerOptionsFromJson(info.config.compilerOptions, cwd).options;
+        } else {
+            const tsconfigPath = ts.findConfigFile(cwd, (file) => fs.existsSync(file), "tsconfig.json");
+            if (tsconfigPath) {
+                const configRes = ts.parseConfigFileTextToJson("tsconfig.json", fs.readFileSync(tsconfigPath, "utf-8"));
+                if (configRes.error) throw new Error(ts.flattenDiagnosticMessageText(configRes.error.messageText, "\n"));
+                tsconfig = ts.convertCompilerOptionsFromJson(configRes.config.compilerOptions, cwd).options;
+            }
         }
         const options = tsconfig || ts.getDefaultCompilerOptions();
         options.types = [];
