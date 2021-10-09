@@ -51,7 +51,6 @@ export class Project {
 
         const isCached = this.extractor.settings.fileCache?.has(removePartOfPath(fileName.split("/"), this.extractor.splitCwd), fileName) || false;
         
-
         this.extractor.fileCache.set(fileName, isCached);
 
         const reExports: Record<string, ModuleExport> = {};
@@ -752,7 +751,7 @@ export class Project {
                 return res;
             }
             return;
-        };
+        }
         return this.resolveSymbol(sym, typeArguments);
     }
 
@@ -905,9 +904,11 @@ export class Project {
         if (path.isAbsolute(filePath)) {
             res = this.extractor.program.getSourceFile(path.join(filePath, "../", `${relative}.ts`));
             if (!res) res = this.extractor.program.getSourceFile(path.join(filePath, "../", `${relative}/index.ts`));
+            if (!res) res = this.extractor.program.getSourceFile(path.join(filePath, "../", `${relative.slice(0, -3)}.ts`));
         } else {
             res = this.extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}.ts`));
             if (!res) res = this.extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}/index.ts`));
+            if (!res) res = this.extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative.slice(0, -3)}.ts`));
         }
         return res;
     }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 
 import fs from "fs";
 import path from "path";
@@ -80,9 +81,8 @@ export class TypescriptExtractor {
         if (tsconfigPath) {
             const configRes = ts.parseConfigFileTextToJson("tsconfig.json", fs.readFileSync(tsconfigPath, "utf-8"));
             if (configRes.error) throw new Error(ts.flattenDiagnosticMessageText(configRes.error.messageText, "\n"));
-            tsconfig = configRes.config.compilerOptions;
+            tsconfig = ts.convertCompilerOptionsFromJson(configRes.config.compilerOptions, cwd).options;
         }
-        
         const options = tsconfig || ts.getDefaultCompilerOptions();
         options.types = [];
         options.skipLibCheck = true;
@@ -94,8 +94,9 @@ export class TypescriptExtractor {
                 entryPoint = `${entryPoint}.ts`;
                 this.settings.entryPoints[i] = entryPoint;
             }
-            if (!fs.existsSync(entryPoint)) throw new Error(`Couldn't find file '${entryPoint}'`);
-            const packageJSON = findPackageJSON(entryPoint);
+            const fullEntryPoint = path.join(cwd, entryPoint);
+            if (!fs.existsSync(fullEntryPoint)) throw new Error(`Couldn't find file '${entryPoint}'`);
+            const packageJSON = findPackageJSON(fullEntryPoint);
             if (!packageJSON) throw new Error("Couldn't find package.json file.");
             packagesMap.set(packageJSON.contents.name, entryPoint);
             packageJSONs.set(entryPoint, packageJSON);
@@ -107,7 +108,7 @@ export class TypescriptExtractor {
         this.checker = this.program.getTypeChecker();
         const projects = [];
         for (const entryPoint of this.settings.entryPoints) {
-            const sourceFile = this.program.getSourceFile(path.isAbsolute(entryPoint) ? entryPoint : path.join(cwd, entryPoint));
+            const sourceFile = this.program.getSourceFile(entryPoint) || this.program.getSourceFile(path.join(cwd, entryPoint));
             if (!sourceFile) continue;
             const project = new Project({ folderPath: removePartOfEndOfPath(sourceFile.fileName, this.splitCwd), extractor: this, packageJSON: packageJSONs.get(entryPoint)! });
             projects.push(project);
