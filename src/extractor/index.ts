@@ -100,25 +100,24 @@ export class TypescriptExtractor {
         const packageJSONs = new Map<string, PackageJSON>();
         for (let i=0; i < this.settings.entryPoints.length; i++) {
             let entryPoint = this.settings.entryPoints[i];
-            if (!entryPoint.endsWith("ts")) {
-                entryPoint = `${entryPoint}.ts`;
-                this.settings.entryPoints[i] = entryPoint;
-            }
-            const fullEntryPoint = path.join(cwd, entryPoint);
-            if (!fs.existsSync(fullEntryPoint)) throw new Error(`Couldn't find file '${entryPoint}'`);
-            const packageJSON = findPackageJSON(fullEntryPoint);
-            if (!packageJSON) throw new Error("Couldn't find package.json file.");
+            if (!entryPoint.endsWith("ts")) entryPoint += ".ts";
+            if (!path.isAbsolute(entryPoint)) entryPoint = path.join(cwd, entryPoint);
+            if (!fs.existsSync(entryPoint)) throw new Error(`Couldn't find file '${entryPoint}'`);
+            const packageJSON = findPackageJSON(entryPoint);
+            if (!packageJSON) throw new Error("Couldn't find package.json file for one of the entry points");
+            if (!packageJSON.contents.name) throw new Error("One of the entry points' package.json is missing a name");
             packagesMap.set(packageJSON.contents.name, entryPoint);
             packageJSONs.set(entryPoint, packageJSON);
+            this.settings.entryPoints[i] = entryPoint;
         }
 
-        const host = createHost(options, packagesMap, this.settings, cwd);
+        const host =  createHost(options, packagesMap, this.settings, cwd);
         this.program = ts.createProgram(this.settings.entryPoints, options, host);
 
         this.checker = this.program.getTypeChecker();
         const projects = [];
         for (const entryPoint of this.settings.entryPoints) {
-            const sourceFile = this.program.getSourceFile(entryPoint) || this.program.getSourceFile(path.join(cwd, entryPoint));
+            const sourceFile = this.program.getSourceFile(entryPoint);
             if (!sourceFile) continue;
             const project = new Project({ folderPath: removePartOfEndOfPath(sourceFile.fileName, this.splitCwd), extractor: this, packageJSON: packageJSONs.get(entryPoint)! });
             projects.push(project);

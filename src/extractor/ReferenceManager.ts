@@ -39,9 +39,14 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
         return;
     }
 
-    findExternal(symbol: ts.Symbol, source?: string) : ReferenceType|undefined {
+    /**
+     * @param source Where the symbol was imported from
+     * @param realName If the real name is provided, it's assumed that the symbol is unknown and it won't be saved in the cache
+     */
+    findExternal(symbol: ts.Symbol, source?: string, realName?: string) : ReferenceType|undefined {
         if (this.has(symbol)) return this.get(symbol);
-        let name = symbol.name;
+        let name = realName || symbol.name;
+        // The last condition makes sure the object is not global
         if (!source && symbol.declarations && symbol.declarations.length && !symbol.declarations[0].getSourceFile().isDeclarationFile) {
             const decl = symbol.declarations[0];
             if (ts.isImportClause(decl)) source = (decl.parent.moduleSpecifier as ts.StringLiteral).text;
@@ -49,6 +54,7 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
                 source = (decl.parent.parent.parent.moduleSpecifier as ts.StringLiteral).text;
                 if (decl.propertyName) name = decl.propertyName.text;
             }
+            else if (ts.isNamespaceImport(decl)) source = (decl.parent.parent.moduleSpecifier as ts.StringLiteral).text;
         }
         if (source) {
             const path = source.split("/");
@@ -56,12 +62,12 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
             if (first && this.namedExternals.has(first)) {
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                 const res = { name, kind: TypeReferenceKinds.EXTERNAL, ...this.namedExternals.get(first)!.run(name, source) };
-                this.set(symbol, res);
+                if (!realName) this.set(symbol, res);
                 return res;
             }
         }
         const unnamed = this.findUnnamedExternal(name, source);
-        if (unnamed) this.set(symbol, unnamed);
+        if (unnamed && !realName) this.set(symbol, unnamed);
         return unnamed;
     }
 

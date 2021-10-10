@@ -551,6 +551,14 @@ export class Project {
 
     resolveSymbolOrStr(node: ts.Node, typeArguments?: Array<Type>) : Type {
         const expSym = this.extractor.checker.getSymbolAtLocation(node);
+        if (expSym && expSym.name === "unknown" && ts.isQualifiedName(node)) {
+            const leftSym = this.extractor.checker.getSymbolAtLocation(node.left);
+            if (leftSym) {
+                const external = this.extractor.refs.findExternal(leftSym, undefined, node.right.text);
+                if (external) return { kind: TypeKinds.REFERENCE, type: external, typeArguments };
+            }
+            return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: node.getText() };
+        }
         if (!expSym) {
             if (!node.getSourceFile()) return { kind: TypeKinds.UNKNOWN };
             const external = this.extractor.refs.findUnnamedExternal(node.getText());
@@ -573,10 +581,10 @@ export class Project {
             typeArguments,
             type: this.extractor.refs.get(sym)!
         } as Reference;
-        const newlyCreated = this.handleSymbol(sym, undefined);
-        if (newlyCreated) return { kind: TypeKinds.REFERENCE, typeArguments, type: newlyCreated };
         const possiblyExternal = this.extractor.refs.findExternal(sym);
         if (possiblyExternal) return { kind: TypeKinds.REFERENCE, typeArguments, type: possiblyExternal };
+        const newlyCreated = this.handleSymbol(sym, undefined);
+        if (newlyCreated) return { kind: TypeKinds.REFERENCE, typeArguments, type: newlyCreated };
         return { kind: TypeKinds.REFERENCE, typeArguments, type: { kind: TypeReferenceKinds.UNKNOWN, name: sym.name }};
     }
 
