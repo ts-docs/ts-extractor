@@ -588,15 +588,15 @@ export class Project {
         return { kind: TypeKinds.REFERENCE, typeArguments, type: { kind: TypeReferenceKinds.UNKNOWN, name: sym.name }};
     }
 
-    resolveType(type: ts.Node) : Type {
+    resolveType(type: ts.Node, realLiteral?: string) : Type {
         if (ts.isTypeReferenceNode(type)) {
-            if ("symbol" in type.typeName) return this.resolveSymbol((type.typeName as Record<string, ts.Symbol>).symbol, type.typeArguments?.map(arg => this.resolveType(arg)));
-            return this.resolveSymbolOrStr(type.typeName, type.typeArguments?.map(arg => this.resolveType(arg)));
+            if ("symbol" in type.typeName) return this.resolveSymbol((type.typeName as Record<string, ts.Symbol>).symbol, type.typeArguments?.map(arg => this.resolveType(arg, realLiteral)));
+            return this.resolveSymbolOrStr(type.typeName, type.typeArguments?.map(arg => this.resolveType(arg, realLiteral)));
         }
         else if (ts.isFunctionTypeNode(type)) {
             return {
                 typeParameters: type.typeParameters && type.typeParameters.map(p => this.resolveTypeParameters(p)),
-                returnType: this.resolveType(type.type),
+                returnType: this.resolveType(type.type, realLiteral),
                 parameters: type.parameters.map(p => this.resolveParameter(p)),
                 kind: TypeKinds.ARROW_FUNCTION
             } as ArrowFunction;
@@ -609,24 +609,24 @@ export class Project {
         }
         else if (ts.isUnionTypeNode(type)) {
             return {
-                types: type.types.map(t => this.resolveType(t)),
+                types: type.types.map(t => this.resolveType(t, realLiteral)),
                 kind: TypeKinds.UNION
             };
         }
         else if (ts.isIntersectionTypeNode(type)) {
             return {
-                types: type.types.map(t => this.resolveType(t)),
+                types: type.types.map(t => this.resolveType(t, realLiteral)),
                 kind: TypeKinds.INTERSECTION
             };
         }
         else if (ts.isTupleTypeNode(type)) {
             return {
-                types: type.elements.map(el => this.resolveType(el)),
+                types: type.elements.map(el => this.resolveType(el, realLiteral)),
                 kind: TypeKinds.TUPLE
             };
         }
         else if (ts.isTypePredicateNode(type)) {
-            if (ts.isThisTypeNode(type.parameterName)) return { kind: TypeKinds.TYPE_PREDICATE, parameter: { kind: TypeKinds.THIS }, type: type.type && this.resolveType(type.type) };
+            if (ts.isThisTypeNode(type.parameterName)) return { kind: TypeKinds.TYPE_PREDICATE, parameter: { kind: TypeKinds.THIS }, type: type.type && this.resolveType(type.type, realLiteral) };
             else return {
                 kind: TypeKinds.TYPE_PREDICATE,
                 parameter: type.parameterName.text
@@ -646,12 +646,12 @@ export class Project {
             }
             return {
                 kind,
-                type: this.resolveType(type.type)
+                type: this.resolveType(type.type, realLiteral)
             };
         }
         else if (ts.isArrayTypeNode(type)) {
             return {
-                type: this.resolveType(type.elementType),
+                type: this.resolveType(type.elementType, realLiteral),
                 kind: TypeKinds.ARRAY_TYPE
             };
         }
@@ -661,7 +661,7 @@ export class Project {
                 typeParameter: this.resolveTypeParameters(type.typeParameter)
             };
         }
-        else if (ts.isParenthesizedTypeNode(type)) return this.resolveType(type.type);
+        else if (ts.isParenthesizedTypeNode(type)) return this.resolveType(type.type, realLiteral);
         else if (ts.isThisTypeNode(type)) {
             const sym = this.extractor.checker.getSymbolAtLocation(type);
             if (!sym) return { name: "this", kind: TypeKinds.STRINGIFIED_UNKNOWN };
@@ -671,31 +671,31 @@ export class Project {
             return {
                 typeParameter: type.typeParameter.name.text,
                 optional: Boolean(type.questionToken),
-                type: type.type && this.resolveType(type.type),
-                constraint: type.typeParameter.constraint && this.resolveType(type.typeParameter.constraint),
+                type: type.type && this.resolveType(type.type, realLiteral),
+                constraint: type.typeParameter.constraint && this.resolveType(type.typeParameter.constraint, realLiteral),
                 kind: TypeKinds.MAPPED_TYPE
             };
         }
         else if (ts.isConditionalTypeNode(type)) {
             return {
-                checkType: this.resolveType(type.checkType),
-                extendsType: this.resolveType(type.extendsType),
-                trueType: this.resolveType(type.trueType),
-                falseType: this.resolveType(type.falseType),
+                checkType: this.resolveType(type.checkType, realLiteral),
+                extendsType: this.resolveType(type.extendsType, realLiteral),
+                trueType: this.resolveType(type.trueType, realLiteral),
+                falseType: this.resolveType(type.falseType, realLiteral),
                 kind: TypeKinds.CONDITIONAL_TYPE
             };
         }
         else if (ts.isTemplateLiteralTypeNode(type)) {
             return {
                 head: type.head.text,
-                spans: type.templateSpans.map(sp => ({type: this.resolveType(sp.type), text: sp.literal.text})),
+                spans: type.templateSpans.map(sp => ({type: this.resolveType(sp.type, realLiteral), text: sp.literal.text})),
                 kind: TypeKinds.TEMPLATE_LITERAL
             };
         }
         else if (ts.isIndexedAccessTypeNode(type)) {
             return {
-                object: this.resolveType(type.objectType),
-                index: this.resolveType(type.indexType),
+                object: this.resolveType(type.objectType, realLiteral),
+                index: this.resolveType(type.indexType, realLiteral),
                 kind: TypeKinds.INDEX_ACCESS
             };
         }
@@ -708,14 +708,14 @@ export class Project {
         else if (ts.isConstructorTypeNode(type)) {
             return {
                 kind: TypeKinds.CONSTRUCTOR_TYPE,
-                returnType: type.type && this.resolveType(type.type),
+                returnType: type.type && this.resolveType(type.type, realLiteral),
                 parameters: type.parameters?.map(param => this.resolveParameter(param)),
                 typeParameters: type.typeParameters?.map(param => this.resolveTypeParameters(param))
             };
         }
         else switch (type.kind) {
         //@ts-expect-error This shouldn't be erroring.
-        case ts.SyntaxKind.LiteralType: return this.resolveType((type as unknown as ts.LiteralType).literal);
+        case ts.SyntaxKind.LiteralType: return this.resolveType((type as unknown as ts.LiteralType).literal, realLiteral);
         case ts.SyntaxKind.NumberKeyword: return {name: "number", kind: TypeKinds.NUMBER};
         case ts.SyntaxKind.StringKeyword: return {name: "string", kind: TypeKinds.STRING};
         case ts.SyntaxKind.BooleanKeyword: return {name: "boolean", kind: TypeKinds.BOOLEAN};
@@ -729,14 +729,14 @@ export class Project {
         case ts.SyntaxKind.BigIntLiteral:
         case ts.SyntaxKind.PrefixUnaryExpression:
         case ts.SyntaxKind.PostfixUnaryExpression:
-        case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL};
-        case ts.SyntaxKind.StringLiteral: return { name: type.getText(), kind: TypeKinds.STRING_LITERAL };
-        case ts.SyntaxKind.RegularExpressionLiteral: return { name: type.getText(), kind: TypeKinds.REGEX_LITERAL }; 
+        case ts.SyntaxKind.NumericLiteral: return { name: realLiteral || type.getText(), kind: TypeKinds.NUMBER_LITERAL};
+        case ts.SyntaxKind.StringLiteral: return {name: realLiteral || "string", kind: TypeKinds.STRING};
+        case ts.SyntaxKind.RegularExpressionLiteral: return { name: realLiteral || type.getText(), kind: TypeKinds.REGEX_LITERAL };
         case ts.SyntaxKind.SymbolKeyword: return { name: "symbol", kind: TypeKinds.SYMBOL };
         case ts.SyntaxKind.BigIntKeyword: return { name: "bigint", kind: TypeKinds.BIGINT };
         case ts.SyntaxKind.NeverKeyword: return { name: "never", kind: TypeKinds.NEVER };
         case ts.SyntaxKind.ObjectKeyword: return { name: "object", kind: TypeKinds.OBJECT };
-        default: return {name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
+        default: return {name: realLiteral || type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
         }
     }
 
@@ -755,7 +755,7 @@ export class Project {
         if (!sym) {
             const typeNode = this.extractor.checker.typeToTypeNode(type, undefined, undefined);
             if (typeNode) {
-                const res = this.resolveType(typeNode);
+                const res = this.resolveType(typeNode, this.extractor.checker.typeToString(type));
                 return res;
             }
             return;
