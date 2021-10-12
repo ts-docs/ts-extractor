@@ -272,11 +272,12 @@ export class Project {
                     constructor = {
                         loc: this.getLOC(currentModule, member),
                         signatures: [{
-                            parameters: member.parameters.map(p => this.resolveParameter(p))
+                            parameters: member.parameters.map(p => this.resolveParameter(p)),
+                            jsDoc: this.getJSDocData(member)
                         }],
                     };
                 } else {
-                    constructor.signatures.push({parameters: member.parameters.map(p => this.resolveParameter(p))});
+                    constructor.signatures.push({parameters: member.parameters.map(p => this.resolveParameter(p)), jsDoc: this.getJSDocData(member)});
                     if (member.body) constructor.loc = this.getLOC(currentModule, member);
                 }
             } 
