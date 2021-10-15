@@ -55,7 +55,6 @@ export interface Node {
     name: string,
     loc: Loc
     jsDoc?: Array<JSDocData>,
-    isExported?: boolean,
     /**
      * Only classes, interfaces, enums, functions, types and constants have an ID, and they only have it if there is another thing of the same type with the same name.
      */
@@ -190,9 +189,10 @@ export interface Literal extends BaseType {
     name: string
 }
 
-export interface TypeParameter extends Node {
+export interface TypeParameter {
+    name: string
     default?: Type,
-    constraint?: Reference
+    constraint?: Type
 }
 
 export interface ClassMember extends Node {
@@ -207,7 +207,7 @@ export interface Property {
     name: string,
     type?: Type,
     isReadonly?: boolean,
-    isOptional: boolean,
+    isOptional?: boolean,
     initializer?: Type
     exclamation?: boolean,
 }
@@ -222,7 +222,7 @@ export interface FunctionParameter {
     rest?: boolean,
     isOptional?: boolean,
     defaultValue?: Type,
-    jsDoc: JSDocData
+    jsDoc?: JSDocData
 }
 
 export interface FunctionSignature extends LoclessNode {
@@ -235,6 +235,7 @@ export interface ClassMethod extends Omit<ClassMember, "name"> {
     signatures: Array<FunctionSignature>,
     isGetter?: boolean,
     isSetter?: boolean,
+    isGenerator?: boolean,
     name: string | Type,
     realName?: string
 }
@@ -252,7 +253,8 @@ export interface ClassDecl extends Node {
 }
 
 export interface FunctionDecl extends Node {
-    signatures: Array<FunctionSignature>
+    signatures: Array<FunctionSignature>,
+    isGenerator?: boolean,
 }
 
 export type ConstructorType = FunctionSignature & BaseType;
@@ -273,7 +275,8 @@ export interface ArrowFunction extends BaseType {
  */
 export interface IndexSignatureDeclaration {
     key?: Type,
-    type: Type
+    type: Type,
+    isReadonly?: boolean
 }
 
 /**
@@ -333,12 +336,16 @@ export interface ObjectProperty {
     index?: IndexSignatureDeclaration,
     /**
      * Will only be present if the interface property is a call signature:
+     * ```
      * (...params) => value
+     * ```
      */
     call?: FunctionSignature,
     /**
      * Will only be present if the interface property is a constructor signature
+     * ```
      * new (...params) => value
+     * ```
      */
     construct?: FunctionSignature,
     jsDoc?: Array<JSDocData>
