@@ -186,7 +186,7 @@ export class Project {
         if (this.extractor.refs.has(val)) return this.extractor.refs.get(val);
         if (!currentModule) {
             const origin = val.declarations[0].getSourceFile();
-            if (this.extractor.program.isSourceFileFromExternalLibrary(origin) || this.extractor.program.isSourceFileDefaultLibrary(origin)) return this.extractor.refs.findExternal(val);
+            if (this.extractor.program.isSourceFileFromExternalLibrary(origin) || this.extractor.program.isSourceFileDefaultLibrary(origin)) return;
             const fileName = origin.fileName;
             currentModule = this.getOrCreateModule(origin.fileName);
             if (this.extractor.fileCache.has(origin.fileName)) isCached = this.extractor.fileCache.get(origin.fileName);
@@ -587,10 +587,10 @@ export class Project {
             typeArguments,
             type: this.extractor.refs.get(sym)!
         } as Reference;
-        const possiblyExternal = this.extractor.refs.findExternal(sym);
-        if (possiblyExternal) return { kind: TypeKinds.REFERENCE, typeArguments, type: possiblyExternal };
         const newlyCreated = this.handleSymbol(sym, undefined);
         if (newlyCreated) return { kind: TypeKinds.REFERENCE, typeArguments, type: newlyCreated };
+        const possiblyExternal = this.extractor.refs.findExternal(sym);
+        if (possiblyExternal) return { kind: TypeKinds.REFERENCE, typeArguments, type: possiblyExternal };
         return { kind: TypeKinds.REFERENCE, typeArguments, type: { kind: TypeReferenceKinds.UNKNOWN, name: sym.name } };
     }
 
@@ -859,7 +859,7 @@ export class Project {
                 };
             }
             const res = this.resolveTypeType(type);
-            if (res.kind === TypeKinds.UNKNOWN) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
+            if (res.kind === TypeKinds.UNKNOWN || (res as Reference).type?.kind === TypeReferenceKinds.UNKNOWN) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
             return res;
         }
         }
@@ -931,15 +931,13 @@ export class Project {
                 })),
                 returnType: this.resolveTypeType(sig.getReturnType())
             };
-            const sym = (type as ts.Type).getSymbol();
-            if (sym) return this.resolveSymbol(sym, this.extractor.checker.getTypeArguments(type as unknown as ts.TypeReference).map(t => this.resolveTypeType(t)));
-            const ext = this.extractor.refs.findUnnamedExternal(this.extractor.checker.typeToString(type));
-            if (ext) return { kind: TypeKinds.REFERENCE, type: ext };
         }
         const typeStr = this.extractor.checker.typeToString(type);
         if (typeStr === "true") return { kind: TypeKinds.TRUE };
         else if (typeStr === "false") return { kind: TypeKinds.FALSE };
-        return { kind: TypeKinds.UNKNOWN };
+        const sym = (type as ts.Type).getSymbol();
+        if (sym) return this.resolveSymbol(sym, this.extractor.checker.getTypeArguments(type as unknown as ts.TypeReference).map(t => this.resolveTypeType(t)));
+        return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: typeStr };
     }
 
     resolveAliasedSymbol(symbol: ts.Symbol): ts.Symbol {
