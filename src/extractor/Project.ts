@@ -98,7 +98,7 @@ export class Project {
                     else exports.push({ ...aliasedRef, alias });
                 }
                 // export * as X from "...";
-                // Goes to "reExports" if the module is different, otherwise to "exports"
+                // Always goes to "reExports"
                 else if (ts.isNamespaceExport(val.declarations[0])) {
                     const namespaceName = val.declarations[0].name.text;
                     const aliased = this.resolveAliasedSymbol(val);
@@ -115,7 +115,11 @@ export class Project {
                     }
                     else {
                         const cached = this.extractor.fileExportsCache[editedName];
-                        if (cached) exports.push(...cached[0]);
+                        if (cached) reExports[editedName] = {
+                            alias: namespaceName, 
+                            module: createModuleRef(currentModule),
+                            references: cached[0]
+                        };
                     }
                 }
                 // export ...
