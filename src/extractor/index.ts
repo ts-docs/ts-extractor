@@ -90,12 +90,13 @@ export class TypescriptExtractor {
             if (tsconfigPath) {
                 const configRes = ts.parseConfigFileTextToJson("tsconfig.json", fs.readFileSync(tsconfigPath, "utf-8"));
                 if (configRes.error) throw new Error(ts.flattenDiagnosticMessageText(configRes.error.messageText, "\n"));
-                tsconfig = ts.convertCompilerOptionsFromJson(configRes.config.compilerOptions, cwd).options;
+                if (configRes.config) tsconfig = ts.convertCompilerOptionsFromJson(configRes.config.compilerOptions, cwd).options;
             }
         }
         const options = tsconfig || ts.getDefaultCompilerOptions();
         options.types = [];
         options.skipLibCheck = true;
+        options.module = ts.ModuleKind.CommonJS;
         const packagesMap = new Map<string, string>(); // package name - package path
         const packageJSONs = new Map<string, PackageJSON>();
         for (let i=0; i < this.settings.entryPoints.length; i++) {
