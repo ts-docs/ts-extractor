@@ -80,11 +80,13 @@ export class TypescriptExtractor {
     run() : Array<Project> {
         const cwd = this.settings.cwd || process.cwd();
         this.splitCwd = cwd.split(path.sep);
-        let tsconfig: ts.CompilerOptions | undefined;
+        let tsconfig: ts.CompilerOptions = {};
         if (this.settings.tsconfig) {
-            const info = ts.parseConfigFileTextToJson("tsconfig.json", fs.readFileSync(path.join(cwd, this.settings.tsconfig), "utf-8"));
-            if (info.error) throw new Error(ts.flattenDiagnosticMessageText(info.error.messageText, "\n"));
-            tsconfig = ts.convertCompilerOptionsFromJson(info.config.compilerOptions, cwd).options;
+            if (this.settings.tsconfig !== "none") {
+                const info = ts.parseConfigFileTextToJson("tsconfig.json", fs.readFileSync(path.join(cwd, this.settings.tsconfig), "utf-8"));
+                if (info.error) throw new Error(ts.flattenDiagnosticMessageText(info.error.messageText, "\n"));
+                tsconfig = ts.convertCompilerOptionsFromJson(info.config.compilerOptions, cwd).options;
+            }
         } else {
             const tsconfigPath = ts.findConfigFile(cwd, (file) => fs.existsSync(file), "tsconfig.json");
             if (tsconfigPath) {
@@ -93,10 +95,14 @@ export class TypescriptExtractor {
                 if (configRes.config) tsconfig = ts.convertCompilerOptionsFromJson(configRes.config.compilerOptions, cwd).options;
             }
         }
-        const options = tsconfig || ts.getDefaultCompilerOptions();
-        options.types = [];
-        options.skipLibCheck = true;
-        options.module = ts.ModuleKind.CommonJS;
+        if (!tsconfig || Object.keys(tsconfig).length === 0) {
+            tsconfig = {
+                skipLibCheck: true,
+                module: ts.ModuleKind.CommonJS,
+                target: ts.ScriptTarget.ES2016
+            };
+        }
+        tsconfig.types = [];
         const packagesMap = new Map<string, string>(); // package name - package path
         const packageJSONs = new Map<string, PackageJSON>();
         for (let i=0; i < this.settings.entryPoints.length; i++) {
@@ -112,8 +118,8 @@ export class TypescriptExtractor {
             this.settings.entryPoints[i] = entryPoint;
         }
 
-        const host = createHost(options, packagesMap, this.settings, cwd);
-        this.program = ts.createProgram(this.settings.entryPoints, options, host);
+        const host = createHost(tsconfig, packagesMap, this.settings, cwd);
+        this.program = ts.createProgram(this.settings.entryPoints, tsconfig, host);
 
         this.checker = this.program.getTypeChecker();
         const projects = [];
