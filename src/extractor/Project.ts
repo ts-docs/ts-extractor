@@ -123,7 +123,7 @@ export class Project {
         }
         const reExportsArr = Object.values(reExports);
         this.extractor.fileExportsCache[fileName] = [exports, reExportsArr];
-        if (addToExports || fileName.endsWith("index")) {
+        if (addToExports || fileName.endsWith("index.ts")) {
             currentModule.exports.push(...exports);
             currentModule.reExports.push(...reExportsArr);
         }
@@ -736,7 +736,7 @@ export class Project {
         case ts.SyntaxKind.PrefixUnaryExpression:
         case ts.SyntaxKind.PostfixUnaryExpression:
         case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL };
-        case ts.SyntaxKind.StringLiteral: return { name: (type as ts.StringLiteral).text, kind: TypeKinds.STRING };
+        case ts.SyntaxKind.StringLiteral: return { name: (type as ts.StringLiteral).text, kind: TypeKinds.STRING_LITERAL };
         case ts.SyntaxKind.RegularExpressionLiteral: return { name: type.getText(), kind: TypeKinds.REGEX_LITERAL };
         case ts.SyntaxKind.SymbolKeyword: return { kind: TypeKinds.SYMBOL };
         case ts.SyntaxKind.BigIntKeyword: return { kind: TypeKinds.BIGINT };
