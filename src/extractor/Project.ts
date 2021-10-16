@@ -257,8 +257,10 @@ export class Project {
                 });
             }
             if (ts.isPropertyDeclaration(member)) {
+                const computedName = ts.isComputedPropertyName(member.name) && this.resolveExpressionToType(member.name.expression);
                 properties.push({
-                    name: member.name.getText(),
+                    name: computedName || member.name.getText(),
+                    realName: computedName ? member.name.getText() : undefined,
                     type: member.type && this.resolveType(member.type),
                     loc: this.getLOC(currentModule, member),
                     isOptional: Boolean(member.questionToken),
@@ -377,7 +379,8 @@ export class Project {
         const properties = [];
         const loc = [];
         const jsDoc = [];
-        for (const decl of (sym.declarations as Array<ts.InterfaceDeclaration>)) {
+        for (const decl of (sym.declarations as Array<ts.Node>)) {
+            if (!ts.isInterfaceDeclaration(decl)) return;
             for (const member of (decl.members || [])) properties.push(this.resolveObjectProperty(member));
             loc.push(this.getLOC(currentModule, decl));
             const jsdoc = this.getJSDocData(decl);
@@ -638,14 +641,14 @@ export class Project {
         else if (ts.isTypeOperatorNode(type)) {
             let kind;
             switch (type.operator) {
-                case ts.SyntaxKind.UniqueKeyword:
-                    kind = TypeKinds.UNIQUE_OPERATOR;
-                    break;
-                case ts.SyntaxKind.KeyOfKeyword:
-                    kind = TypeKinds.KEYOF_OPERATOR;
-                    break;
-                case ts.SyntaxKind.ReadonlyKeyword:
-                    kind = TypeKinds.READONLY_OPERATOR;
+            case ts.SyntaxKind.UniqueKeyword:
+                kind = TypeKinds.UNIQUE_OPERATOR;
+                break;
+            case ts.SyntaxKind.KeyOfKeyword:
+                kind = TypeKinds.KEYOF_OPERATOR;
+                break;
+            case ts.SyntaxKind.ReadonlyKeyword:
+                kind = TypeKinds.READONLY_OPERATOR;
             }
             return {
                 kind,
@@ -717,29 +720,29 @@ export class Project {
             };
         }
         else switch (type.kind) {
-            //@ts-expect-error This shouldn't be erroring.
-            case ts.SyntaxKind.LiteralType: return this.resolveType((type as unknown as ts.LiteralType).literal);
-            case ts.SyntaxKind.NumberKeyword: return { kind: TypeKinds.NUMBER };
-            case ts.SyntaxKind.StringKeyword: return { kind: TypeKinds.STRING };
-            case ts.SyntaxKind.BooleanKeyword: return { kind: TypeKinds.BOOLEAN };
-            case ts.SyntaxKind.TrueKeyword: return { kind: TypeKinds.TRUE };
-            case ts.SyntaxKind.FalseKeyword: return { kind: TypeKinds.FALSE };
-            case ts.SyntaxKind.UndefinedKeyword: return { kind: TypeKinds.UNDEFINED };
-            case ts.SyntaxKind.NullKeyword: return { kind: TypeKinds.NULL };
-            case ts.SyntaxKind.VoidKeyword: return { kind: TypeKinds.VOID };
-            case ts.SyntaxKind.AnyKeyword: return { kind: TypeKinds.ANY };
-            case ts.SyntaxKind.UnknownKeyword: return { kind: TypeKinds.UNKNOWN };
-            case ts.SyntaxKind.BigIntLiteral:
-            case ts.SyntaxKind.PrefixUnaryExpression:
-            case ts.SyntaxKind.PostfixUnaryExpression:
-            case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL };
-            case ts.SyntaxKind.StringLiteral: return { name: type.getText(), kind: TypeKinds.STRING };
-            case ts.SyntaxKind.RegularExpressionLiteral: return { name: type.getText(), kind: TypeKinds.REGEX_LITERAL };
-            case ts.SyntaxKind.SymbolKeyword: return { kind: TypeKinds.SYMBOL };
-            case ts.SyntaxKind.BigIntKeyword: return { kind: TypeKinds.BIGINT };
-            case ts.SyntaxKind.NeverKeyword: return { kind: TypeKinds.NEVER };
-            case ts.SyntaxKind.ObjectKeyword: return { kind: TypeKinds.OBJECT };
-            default: return { name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
+        //@ts-expect-error This shouldn't be erroring.
+        case ts.SyntaxKind.LiteralType: return this.resolveType((type as unknown as ts.LiteralType).literal);
+        case ts.SyntaxKind.NumberKeyword: return { kind: TypeKinds.NUMBER };
+        case ts.SyntaxKind.StringKeyword: return { kind: TypeKinds.STRING };
+        case ts.SyntaxKind.BooleanKeyword: return { kind: TypeKinds.BOOLEAN };
+        case ts.SyntaxKind.TrueKeyword: return { kind: TypeKinds.TRUE };
+        case ts.SyntaxKind.FalseKeyword: return { kind: TypeKinds.FALSE };
+        case ts.SyntaxKind.UndefinedKeyword: return { kind: TypeKinds.UNDEFINED };
+        case ts.SyntaxKind.NullKeyword: return { kind: TypeKinds.NULL };
+        case ts.SyntaxKind.VoidKeyword: return { kind: TypeKinds.VOID };
+        case ts.SyntaxKind.AnyKeyword: return { kind: TypeKinds.ANY };
+        case ts.SyntaxKind.UnknownKeyword: return { kind: TypeKinds.UNKNOWN };
+        case ts.SyntaxKind.BigIntLiteral:
+        case ts.SyntaxKind.PrefixUnaryExpression:
+        case ts.SyntaxKind.PostfixUnaryExpression:
+        case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL };
+        case ts.SyntaxKind.StringLiteral: return { name: (type as ts.StringLiteral).text, kind: TypeKinds.STRING };
+        case ts.SyntaxKind.RegularExpressionLiteral: return { name: type.getText(), kind: TypeKinds.REGEX_LITERAL };
+        case ts.SyntaxKind.SymbolKeyword: return { kind: TypeKinds.SYMBOL };
+        case ts.SyntaxKind.BigIntKeyword: return { kind: TypeKinds.BIGINT };
+        case ts.SyntaxKind.NeverKeyword: return { kind: TypeKinds.NEVER };
+        case ts.SyntaxKind.ObjectKeyword: return { kind: TypeKinds.OBJECT };
+        default: return { name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
         }
     }
 
@@ -759,15 +762,19 @@ export class Project {
     }
 
     resolveObjectProperty(prop: ts.TypeElement): ObjectProperty {
-        if (ts.isPropertySignature(prop)) return {
-            prop: {
-                name: prop.name.getText(),
-                type: prop.type && this.resolveType(prop.type),
-                isOptional: Boolean(prop.questionToken),
-                isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword)
-            },
-            jsDoc: this.getJSDocData(prop)
-        };
+        if (ts.isPropertySignature(prop)) {
+            const computedName = ts.isComputedPropertyName(prop.name) && this.resolveExpressionToType(prop.name.expression);
+            return {
+                prop: {
+                    name: computedName || prop.name.getText(),
+                    realName: computedName ? prop.name.getText() : undefined,
+                    type: prop.type && this.resolveType(prop.type),
+                    isOptional: Boolean(prop.questionToken),
+                    isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword)
+                },
+                jsDoc: this.getJSDocData(prop)
+            };
+        }
         else if (ts.isMethodSignature(prop)) return {
             prop: {
                 name: prop.name.getText(),
@@ -829,23 +836,31 @@ export class Project {
     resolveExpressionToType(exp: ts.Node): Type {
         if (ts.isNewExpression(exp)) return this.resolveSymbolOrStr(exp.expression, exp.typeArguments?.map(arg => this.resolveType(arg)));
         switch (exp.kind) {
-            case ts.SyntaxKind.BigIntLiteral:
-            case ts.SyntaxKind.PrefixUnaryExpression:
-            case ts.SyntaxKind.PostfixUnaryExpression:
-            case ts.SyntaxKind.NumericLiteral: return { name: exp.getText(), kind: TypeKinds.NUMBER_LITERAL };
-            case ts.SyntaxKind.FalseKeyword: return { kind: TypeKinds.FALSE };
-            case ts.SyntaxKind.TrueKeyword: return { kind: TypeKinds.TRUE };
-            case ts.SyntaxKind.StringLiteral: return { name: exp.getText(), kind: TypeKinds.STRING_LITERAL };
-            case ts.SyntaxKind.NullKeyword: return { kind: TypeKinds.NULL };
-            case ts.SyntaxKind.RegularExpressionLiteral: return { name: exp.getText(), kind: TypeKinds.REGEX_LITERAL };
-            case ts.SyntaxKind.UndefinedKeyword: return { kind: TypeKinds.UNDEFINED };
-            default: {
-                const type = this.extractor.checker.getTypeAtLocation(exp);
-                if (!type) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
-                const res = this.resolveTypeType(type);
-                if (res.kind === TypeKinds.UNKNOWN) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
-                return res;
+        case ts.SyntaxKind.BigIntLiteral:
+        case ts.SyntaxKind.PrefixUnaryExpression:
+        case ts.SyntaxKind.PostfixUnaryExpression:
+        case ts.SyntaxKind.NumericLiteral: return { name: exp.getText(), kind: TypeKinds.NUMBER_LITERAL };
+        case ts.SyntaxKind.FalseKeyword: return { kind: TypeKinds.FALSE };
+        case ts.SyntaxKind.TrueKeyword: return { kind: TypeKinds.TRUE };
+        case ts.SyntaxKind.StringLiteral: return { name: (exp as ts.StringLiteral).text, kind: TypeKinds.STRING_LITERAL };
+        case ts.SyntaxKind.NullKeyword: return { kind: TypeKinds.NULL };
+        case ts.SyntaxKind.RegularExpressionLiteral: return { name: exp.getText(), kind: TypeKinds.REGEX_LITERAL };
+        case ts.SyntaxKind.UndefinedKeyword: return { kind: TypeKinds.UNDEFINED };
+        default: {
+            const type = this.extractor.checker.getTypeAtLocation(exp);
+            if (!type) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
+            if (type.symbol) {
+                const aliased = this.resolveAliasedSymbol(type.symbol);
+                if (this.extractor.refs.has(aliased)) return {
+                    kind: TypeKinds.REFERENCE,
+                    type: this.extractor.refs.get(aliased)!,
+                    typeArguments: this.extractor.checker.getTypeArguments(type as ts.TypeReference)?.map(arg => this.resolveTypeType(arg))
+                };
             }
+            const res = this.resolveTypeType(type);
+            if (res.kind === TypeKinds.UNKNOWN) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
+            return res;
+        }
         }
     }
 
@@ -865,7 +880,7 @@ export class Project {
         else if (hasBit(type.flags, ts.TypeFlags.Any)) return { kind: TypeKinds.ANY };
         else if (hasBit(type.flags, ts.TypeFlags.ESSymbol)) return { kind: TypeKinds.SYMBOL };
         else if (hasBit(type.flags, ts.TypeFlags.BigIntLike)) return { kind: TypeKinds.BIGINT };
-        else if (this.extractor.checker.typeToTypeNode(type, undefined, undefined)!.kind === ts.SyntaxKind.ArrayType) return { kind: TypeKinds.ARRAY_TYPE, type: this.resolveTypeType(this.extractor.checker.getTypeArguments(type as unknown as ts.TypeReference)[0]) }
+        else if (this.extractor.checker.typeToTypeNode(type, undefined, undefined)?.kind === ts.SyntaxKind.ArrayType) return { kind: TypeKinds.ARRAY_TYPE, type: this.resolveTypeType(this.extractor.checker.getTypeArguments(type as unknown as ts.TypeReference)[0]) };
         else if (type.symbol && type.symbol.name === "__object") {
             const properties: Array<ObjectProperty> = [];
             for (const property of type.getProperties()) {
@@ -890,12 +905,12 @@ export class Project {
                         key: { kind: TypeKinds.STRING },
                         type: this.resolveTypeType(type.getStringIndexType()!)
                     }
-                })
+                });
             }
             return {
                 kind: TypeKinds.OBJECT_LITERAL,
                 properties
-            }
+            };
         }
         else if (type.isTypeParameter()) return { kind: TypeKinds.REFERENCE, type: { kind: TypeReferenceKinds.TYPE_ALIAS, name: type.symbol.name } };
         else {
@@ -913,7 +928,7 @@ export class Project {
                     constraint: p.getConstraint() ? this.resolveTypeType(p.getConstraint()!) : undefined,
                 })),
                 returnType: this.resolveTypeType(sig.getReturnType())
-            }
+            };
             const sym = (type as ts.Type).getSymbol();
             if (sym) return this.resolveSymbol(sym, this.extractor.checker.getTypeArguments(type as unknown as ts.TypeReference).map(t => this.resolveTypeType(t)));
             const ext = this.extractor.refs.findUnnamedExternal(this.extractor.checker.typeToString(type));

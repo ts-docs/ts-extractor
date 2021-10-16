@@ -51,7 +51,7 @@ export interface TypescriptExtractorSettings {
      */
     fileCache?: FileObjectCache,
     /**
-     * A custom reference manager instance
+     * A custom reference manager instance, must extend [[ReferenceManager]]
      */
     refs?: ReferenceManager,
     /**
@@ -111,7 +111,7 @@ export class TypescriptExtractor {
             this.settings.entryPoints[i] = entryPoint;
         }
 
-        const host =  createHost(options, packagesMap, this.settings, cwd);
+        const host = createHost(options, packagesMap, this.settings, cwd);
         this.program = ts.createProgram(this.settings.entryPoints, options, host);
 
         this.checker = this.program.getTypeChecker();

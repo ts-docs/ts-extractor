@@ -204,7 +204,8 @@ export interface ClassMember extends Node {
 }
 
 export interface Property {
-    name: string,
+    name: string | Type,
+    realName?: string
     type?: Type,
     isReadonly?: boolean,
     isOptional?: boolean,
@@ -212,7 +213,7 @@ export interface Property {
     exclamation?: boolean,
 }
 
-export interface ClassProperty extends ClassMember, Property {
+export interface ClassProperty extends Omit<ClassMember, "name">, Property {
     exclamation?: boolean,
 }
 
