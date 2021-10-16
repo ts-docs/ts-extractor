@@ -205,7 +205,7 @@ export interface ClassMember extends Node {
 
 export interface Property {
     name: string | Type,
-    realName?: string
+    rawName: string
     type?: Type,
     isReadonly?: boolean,
     isOptional?: boolean,
@@ -238,7 +238,7 @@ export interface ClassMethod extends Omit<ClassMember, "name"> {
     isSetter?: boolean,
     isGenerator?: boolean,
     name: string | Type,
-    realName?: string
+    rawName: string
 }
 
 export type ClassConstructor = Omit<FunctionDecl, "name">

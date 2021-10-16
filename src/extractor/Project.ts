@@ -260,7 +260,7 @@ export class Project {
                 const computedName = ts.isComputedPropertyName(member.name) && this.resolveExpressionToType(member.name.expression);
                 properties.push({
                     name: computedName || member.name.getText(),
-                    realName: computedName ? member.name.getText() : undefined,
+                    rawName: member.name.getText(),
                     type: member.type && this.resolveType(member.type),
                     loc: this.getLOC(currentModule, member),
                     isOptional: Boolean(member.questionToken),
@@ -298,7 +298,7 @@ export class Project {
                 } else {
                     methods.set(methodName, {
                         name: computedName || methodName,
-                        realName: computedName ? methodName : undefined,
+                        rawName: methodName,
                         loc: this.getLOC(currentModule, member),
                         isPrivate, isProtected, isStatic, isAbstract,
                         jsDoc: this.getJSDocData(member),
@@ -317,7 +317,7 @@ export class Project {
                 const computedName = ts.isComputedPropertyName(member.name) ? this.resolveExpressionToType(member.name.expression) : undefined;
                 methods.set(methodName, {
                     name: computedName || methodName,
-                    realName: computedName ? methodName : undefined,
+                    rawName: methodName,
                     signatures: [{
                         returnType: this.resolveReturnType(member),
                         jsDoc: this.getJSDocData(member)
@@ -333,7 +333,7 @@ export class Project {
                 const computedName = ts.isComputedPropertyName(member.name) ? this.resolveExpressionToType(member.name.expression) : undefined;
                 methods.set(methodName, {
                     name: computedName || methodName,
-                    realName: computedName ? methodName : undefined,
+                    rawName: methodName,
                     signatures: [{
                         returnType: this.resolveReturnType(member),
                         parameters: member.parameters.map(p => this.resolveParameter(p)),
@@ -767,7 +767,7 @@ export class Project {
             return {
                 prop: {
                     name: computedName || prop.name.getText(),
-                    realName: computedName ? prop.name.getText() : undefined,
+                    rawName: prop.name.getText(),
                     type: prop.type && this.resolveType(prop.type),
                     isOptional: Boolean(prop.questionToken),
                     isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword)
@@ -778,6 +778,7 @@ export class Project {
         else if (ts.isMethodSignature(prop)) return {
             prop: {
                 name: prop.name.getText(),
+                rawName: prop.name.getText(),
                 type: {
                     kind: TypeKinds.ARROW_FUNCTION,
                     parameters: prop.parameters?.map(param => this.resolveParameter(param)),
@@ -887,6 +888,7 @@ export class Project {
                 properties.push({
                     prop: {
                         name: property.name,
+                        rawName: property.name,
                         type: this.resolveTypeType(this.extractor.checker.getTypeOfSymbolAtLocation(property, property.valueDeclaration!))
                     }
                 });
