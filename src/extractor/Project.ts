@@ -44,7 +44,7 @@ export class Project {
         }
         else {
             sym = sourceFile;
-            fileName = sym.name.slice(1, -1);
+            fileName = this.resolveSymbolFileName(sym);
         }
         if (!sym || !sym.exports) return;
         if (this.extractor.fileCache.has(fileName)) return;
@@ -87,31 +87,36 @@ export class Project {
                         if (mod.reExports.some(ex => ex.alias === alias)) reExports[val.name] = { module: createModuleRef(mod), reExportsReExport: alias, references: [] };
                         else {
                             if (!fileExports) continue;
-                            reExports[val.name] = { alias, module: createModuleRef(mod), references: fileExports[0] };
+                            reExports[val.name] = { module: createModuleRef(mod), references: [] };
                         }
                         continue;
                     }
                     if (mod !== currentModule) {
-                        if (!reExports[mod.name]) reExports[mod.name] = { module: createModuleRef(mod), references: [this.extractor.refs.get(aliased)!], alias };
+                        if (!reExports[mod.name]) reExports[mod.name] = { module: createModuleRef(mod), references: [{...this.extractor.refs.get(aliased)!, alias}] };
                         else reExports[mod.name].references.push({ ...this.extractor.refs.get(aliased)!, alias });
                     }
                     else exports.push({ ...aliasedRef, alias });
                 }
                 // export * as X from "...";
-                // Always goes to "reExports"
+                // Goes to "reExports" if the module is different, otherwise to "exports"
                 else if (ts.isNamespaceExport(val.declarations[0])) {
                     const namespaceName = val.declarations[0].name.text;
                     const aliased = this.resolveAliasedSymbol(val);
                     if (!aliased.declarations || !aliased.declarations.length) continue;
-                    const mod = this.getOrCreateModule(aliased.name);
+                    const editedName = this.resolveSymbolFileName(aliased);
+                    const mod = this.getOrCreateModule(editedName);
                     this.visitor(aliased, mod);
-                    const exportsFromMod = this.extractor.fileExportsCache[aliased.name];
-                    if (!exportsFromMod) continue;
-                    reExports[aliased.name] = {
-                        alias: namespaceName,
-                        module: createModuleRef(mod),
-                        references: exportsFromMod[0]
-                    };
+                    if (mod !== currentModule) {
+                        reExports[editedName] = {
+                            alias: namespaceName,
+                            module: createModuleRef(mod),
+                            references: []
+                        };
+                    }
+                    else {
+                        const cached = this.extractor.fileExportsCache[editedName];
+                        if (cached) exports.push(...cached[0]);
+                    }
                 }
                 // export ...
                 // Always go to "exports"
@@ -123,7 +128,7 @@ export class Project {
         }
         const reExportsArr = Object.values(reExports);
         this.extractor.fileExportsCache[fileName] = [exports, reExportsArr];
-        if (addToExports || fileName.endsWith("index.ts")) {
+        if (addToExports || fileName.endsWith("index.ts") || fileName.endsWith("index")) {
             currentModule.exports.push(...exports);
             currentModule.reExports.push(...reExportsArr);
         }
@@ -953,6 +958,10 @@ export class Project {
         const tag = ts.getJSDocParameterTags(node)[0];
         if (!tag) return;
         return ts.getTextOfJSDocComment(tag.comment);
+    }
+
+    resolveSymbolFileName(sym: ts.Symbol) : string {
+        return sym.name.slice(1, -1);
     }
 
     getJSDocData(node: ts.Node): Array<JSDocData> | undefined {
