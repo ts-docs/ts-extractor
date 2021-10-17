@@ -65,9 +65,13 @@ export class Project {
                         if (!reExportedFile) continue;
                         const mod = this.getOrCreateModule(reExportedFile.fileName);
                         if (mod !== currentModule) {
-                            if (!reExports[mod.name]) reExports[mod.name] = { references: [], module: createModuleRef(mod) };
                             this.visitor(reExportedFile, mod);
-                        } else this.visitor(reExportedFile, mod, true);
+                            if (!reExports[mod.name]) reExports[mod.name] = {
+                                references: reExportedFile.fileName.endsWith("index.ts") ? [] : (this.extractor.fileExportsCache[reExportedFile.fileName]?.[0] || []),
+                                module: createModuleRef(mod)
+                            };
+                        }
+                        else this.visitor(reExportedFile, mod, true);
                     }
                 }
             } else if (val.declarations && val.declarations.length) {
@@ -80,14 +84,18 @@ export class Project {
                     const source = aliased.declarations![0].getSourceFile();
                     const mod = this.getOrCreateModule(source.fileName);
                     this.visitor(source, mod);
+                    if (ts.isSourceFile(aliased.declarations[0])) {
+                        const [alias, realName] = val.declarations[0].propertyName ? [val.declarations[0].name.text, val.declarations[0].propertyName.text] : [undefined, val.declarations[0].name];
+                        console.log(alias, realName);
+                    }
                     const alias = val.name !== aliased.name ? val.name : undefined;
-                    const aliasedRef = this.extractor.refs.get(aliased);
+                    const aliasedRef = this.extractor.refs.get(aliased); 
                     if (!aliasedRef) {
                         const fileExports = this.extractor.fileExportsCache[source.fileName];
                         if (mod.reExports.some(ex => ex.alias === alias)) reExports[val.name] = { module: createModuleRef(mod), reExportsReExport: alias, references: [] };
                         else {
                             if (!fileExports) continue;
-                            reExports[val.name] = { module: createModuleRef(mod), references: [] };
+                            reExports[val.name] = { module: createModuleRef(mod), references: [], alias };
                         }
                         continue;
                     }
@@ -110,7 +118,7 @@ export class Project {
                         reExports[editedName] = {
                             alias: namespaceName,
                             module: createModuleRef(mod),
-                            references: []
+                            references: editedName.endsWith("index.ts") ? [] : (this.extractor.fileExportsCache[editedName]?.[0] || [])
                         };
                     }
                     else {
@@ -132,7 +140,7 @@ export class Project {
         }
         const reExportsArr = Object.values(reExports);
         this.extractor.fileExportsCache[fileName] = [exports, reExportsArr];
-        if (addToExports || fileName.endsWith("index.ts") || fileName.endsWith("index")) {
+        if (addToExports || fileName.endsWith("index.ts")) {
             currentModule.exports.push(...exports);
             currentModule.reExports.push(...reExportsArr);
         }
@@ -965,7 +973,7 @@ export class Project {
     }
 
     resolveSymbolFileName(sym: ts.Symbol) : string {
-        return sym.name.slice(1, -1);
+        return sym.name.slice(1, -1) + ".ts";
     }
 
     getJSDocData(node: ts.Node): Array<JSDocData> | undefined {
