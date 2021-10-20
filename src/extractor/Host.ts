@@ -38,7 +38,7 @@ export function createHost(options: ts.CompilerOptions, customModules: Map<strin
                 });
             } else {
                 const result = ts.resolveModuleName(module, file, options, {fileExists: defaultHost.fileExists, readFile: defaultHost.readFile});
-                if (result.resolvedModule && (result.resolvedModule.extension === ts.Extension.Ts || result.resolvedModule.extension === ts.Extension.Tsx)) res.push(result.resolvedModule);
+                if (result.resolvedModule && result.resolvedModule.extension === ts.Extension.Ts) res.push(result.resolvedModule);
                 else res.push(undefined);
             }
         }

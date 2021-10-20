@@ -16,6 +16,11 @@ export function getLastItemFromPath(p: string) : string {
     return path.parse(p).base;
 }
 
+export function getFilenameFromPath(p: string) : string {
+    const name = path.parse(p);
+    return name.base.slice(0, name.base.indexOf("."));
+}
+
 export interface PackageJSON { 
     contents: Record<string, string>,
     path: string

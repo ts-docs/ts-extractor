@@ -7,17 +7,15 @@ import { findPackageJSON, PackageJSON, removePartOfEndOfPath } from "../utils";
 import { createHost } from "./Host";
 import { Project } from "./Project";
 import { ExternalReference, ReferenceManager } from "./ReferenceManager";
-import { Module, ModuleExport, ReferenceType } from "./structure";
+import { Module } from "./structure";
 
 export abstract class FileObjectCache {
     /**
-     * 
-     * @param filename The path to the file. It's going to be relative to the root of the project.
      * @param absolute The absolute path to the file.
      * 
      * @returns Return true if the file is cached, false otherwise.
      */
-    abstract has(filename: string, absolute: string) : boolean;
+    abstract has(absolute: string) : boolean;
 }
 
 export interface TypescriptExtractorSettings {
@@ -67,14 +65,19 @@ export class TypescriptExtractor {
     refs: ReferenceManager
     moduleCache: Record<string, Module>
     fileCache: Map<string, boolean|undefined>
-    fileExportsCache: Record<string, [Array<ReferenceType>, Array<ModuleExport>]>
     splitCwd!: Array<string>
     constructor(settings: TypescriptExtractorSettings) {
         this.settings = settings;
         this.refs = settings.refs || new ReferenceManager(settings.externals);
         this.moduleCache = {};
         this.fileCache = new Map();
-        this.fileExportsCache = {};
+    }
+
+    isCachedFile(fileName: string) : boolean|undefined {
+        if (this.fileCache.has(fileName)) return this.fileCache.get(fileName)!;
+        const res = this.settings.fileCache?.has(fileName);
+        this.fileCache.set(fileName, res);
+        return res;
     }
 
     run() : Array<Project> {
@@ -128,7 +131,7 @@ export class TypescriptExtractor {
             if (!sourceFile) continue;
             const project = new Project({ folderPath: removePartOfEndOfPath(sourceFile.fileName, this.splitCwd), extractor: this, packageJSON: packageJSONs.get(entryPoint)! });
             projects.push(project);
-            project.visitor(sourceFile, project.module, true);
+            project.visitor(sourceFile, project.module);
         }
         return projects;
     }

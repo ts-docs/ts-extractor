@@ -2,8 +2,9 @@
 import path from "path";
 import ts from "typescript";
 import { ObjectProperty, TypescriptExtractor } from ".";
-import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON, removePartOfPath } from "../utils";
-import { AliasedReference, ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, createModuleRef, FunctionParameter, IndexSignatureDeclaration, JSDocData, JSDocTag, Loc, Module, ModuleExport, ObjectLiteral, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
+import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON, } from "../utils";
+import { registerDirectExport, registerDirectReExport, registerNamespaceReExport, registerOtherExportOrReExport } from "./ExportHandler";
+import { ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, FunctionParameter, IndexSignatureDeclaration, JSDocData, JSDocTag, Loc, Module, ObjectLiteral, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
 
 export class Project {
     repository?: string
@@ -34,7 +35,7 @@ export class Project {
         this.idAcc = 1;
     }
 
-    visitor(sourceFile: ts.SourceFile | ts.Symbol, currentModule: Module, addToExports = false): void {
+    visitor(sourceFile: ts.SourceFile | ts.Symbol, currentModule: Module): void {
         let sym;
         let fileName;
         if ("fileName" in sourceFile) {
@@ -48,101 +49,29 @@ export class Project {
         }
         if (!sym || !sym.exports) return;
         if (this.extractor.fileCache.has(fileName)) return;
+        
+        const isCached = this.extractor.isCachedFile(fileName);
 
-        const isCached = this.extractor.settings.fileCache?.has(removePartOfPath(fileName.split("/"), this.extractor.splitCwd), fileName) || false;
-
-        this.extractor.fileCache.set(fileName, isCached);
-
-        const reExports: Record<string, ModuleExport> = {};
-        const exports: Array<AliasedReference> = [];
         // @ts-expect-error You should be able to do that
         for (const [, val] of sym.exports) {
-            // export * from "..." - goes to "exports"
+            // export * from "..."
             if (val.name === "__export") {
                 for (const decl of val.declarations!) {
-                    if (ts.isExportDeclaration(decl) && decl.moduleSpecifier && ts.isStringLiteral(decl.moduleSpecifier)) {
-                        const reExportedFile = this.resolveSourceFile(decl.getSourceFile().fileName, decl.moduleSpecifier.text);
-                        if (!reExportedFile) continue;
-                        const mod = this.getOrCreateModule(reExportedFile.fileName);
-                        if (mod !== currentModule) {
-                            this.visitor(reExportedFile, mod);
-                            if (!reExports[mod.name]) reExports[mod.name] = {
-                                references: reExportedFile.fileName.endsWith("index.ts") ? [] : (this.extractor.fileExportsCache[reExportedFile.fileName]?.[0] || []),
-                                module: createModuleRef(mod)
-                            };
-                        }
-                        else this.visitor(reExportedFile, mod, true);
-                    }
+                    if (ts.isExportDeclaration(decl) && decl.moduleSpecifier && ts.isStringLiteral(decl.moduleSpecifier)) registerDirectReExport(this, currentModule, decl.moduleSpecifier);
                 }
             } else if (val.declarations && val.declarations.length) {
                 // export { ... } from "...";
                 // import { ... } from "..."; export { ... };
-                // If the module is different, goes to "reExports", otherwise "exports"
-                if (ts.isExportSpecifier(val.declarations[0])) {
-                    const aliased = this.resolveAliasedSymbol(val);
-                    if (!aliased.declarations || !aliased.declarations.length) continue;
-                    const source = aliased.declarations![0].getSourceFile();
-                    const mod = this.getOrCreateModule(source.fileName);
-                    this.visitor(source, mod);
-                    if (ts.isSourceFile(aliased.declarations[0])) {
-                        const [alias, realName] = val.declarations[0].propertyName ? [val.declarations[0].name.text, val.declarations[0].propertyName.text] : [undefined, val.declarations[0].name];
-                        console.log(alias, realName);
-                    }
-                    const alias = val.name !== aliased.name ? val.name : undefined;
-                    const aliasedRef = this.extractor.refs.get(aliased); 
-                    if (!aliasedRef) {
-                        const fileExports = this.extractor.fileExportsCache[source.fileName];
-                        if (mod.reExports.some(ex => ex.alias === alias)) reExports[val.name] = { module: createModuleRef(mod), reExportsReExport: alias, references: [] };
-                        else {
-                            if (!fileExports) continue;
-                            reExports[val.name] = { module: createModuleRef(mod), references: [], alias };
-                        }
-                        continue;
-                    }
-                    if (mod !== currentModule) {
-                        if (!reExports[mod.name]) reExports[mod.name] = { module: createModuleRef(mod), references: [{...this.extractor.refs.get(aliased)!, alias}] };
-                        else reExports[mod.name].references.push({ ...this.extractor.refs.get(aliased)!, alias });
-                    }
-                    else exports.push({ ...aliasedRef, alias });
-                }
+                if (ts.isExportSpecifier(val.declarations[0])) registerOtherExportOrReExport(this, currentModule, val);
                 // export * as X from "...";
                 // Always goes to "reExports"
-                else if (ts.isNamespaceExport(val.declarations[0])) {
-                    const namespaceName = val.declarations[0].name.text;
-                    const aliased = this.resolveAliasedSymbol(val);
-                    if (!aliased.declarations || !aliased.declarations.length) continue;
-                    const editedName = this.resolveSymbolFileName(aliased);
-                    const mod = this.getOrCreateModule(editedName);
-                    this.visitor(aliased, mod);
-                    if (mod !== currentModule) {
-                        reExports[editedName] = {
-                            alias: namespaceName,
-                            module: createModuleRef(mod),
-                            references: editedName.endsWith("index.ts") ? [] : (this.extractor.fileExportsCache[editedName]?.[0] || [])
-                        };
-                    }
-                    else {
-                        const cached = this.extractor.fileExportsCache[editedName];
-                        if (cached) reExports[editedName] = {
-                            alias: namespaceName, 
-                            module: createModuleRef(currentModule),
-                            references: cached[0]
-                        };
-                    }
-                }
+                else if (ts.isNamespaceExport(val.declarations[0])) registerNamespaceReExport(this, currentModule, val);
                 // export ...
-                // Always go to "exports"
                 else {
                     const sym = this.handleSymbol(val, currentModule, isCached);
-                    if (sym) exports.push(sym);
+                    if (sym) registerDirectExport(fileName, currentModule, sym);
                 }
             }
-        }
-        const reExportsArr = Object.values(reExports);
-        this.extractor.fileExportsCache[fileName] = [exports, reExportsArr];
-        if (addToExports || fileName.endsWith("index.ts")) {
-            currentModule.exports.push(...exports);
-            currentModule.reExports.push(...reExportsArr);
         }
         return;
     }
@@ -205,11 +134,8 @@ export class Project {
             const origin = val.declarations[0].getSourceFile();
             if (this.extractor.program.isSourceFileFromExternalLibrary(origin) || this.extractor.program.isSourceFileDefaultLibrary(origin)) return;
             const fileName = origin.fileName;
-            currentModule = this.getOrCreateModule(origin.fileName);
-            if (this.extractor.fileCache.has(origin.fileName)) isCached = this.extractor.fileCache.get(origin.fileName);
-            else {
-                isCached = this.extractor.settings.fileCache?.has(removePartOfPath(fileName.split("/"), this.extractor.splitCwd), fileName);
-            }
+            currentModule = this.getOrCreateModule(fileName);
+            isCached = this.extractor.fileCache.get(fileName);
         }
 
         if (!this.ignoreNamespaceMembers && ts.isModuleBlock(val.declarations[0].parent)) {
@@ -499,6 +425,7 @@ export class Project {
     handleNamespaceDecl(symbol: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
         const firstDecl = symbol.declarations![0]! as ts.ModuleDeclaration;
         const newMod = createModule(firstDecl.name.text, [...currentModule.path, firstDecl.name.text], false, this.getLOC(currentModule, firstDecl).sourceFile, true);
+        newMod.exports.index = { exports: [], reExports: [] };
         const namespaceLoc = this.getLOC(newMod, firstDecl);
         newMod.repository = namespaceLoc.sourceFile;
         currentModule.modules.set(newMod.name, newMod);
@@ -513,7 +440,7 @@ export class Project {
         // @ts-expect-error You should be able to do that
         for (const [, element] of symbol.exports) {
             const sym = this.handleSymbol(element, newMod, areChildrenCached);
-            if (sym) newMod.exports.push(sym);
+            if (sym) newMod.exports.index.exports.push(sym);
         }
         this.ignoreNamespaceMembers = false;
         return ref;
@@ -1007,26 +934,6 @@ export class Project {
             pos,
             sourceFile: currentModule.repository && `${currentModule.repository}/${getLastItemFromPath(sourceFile.fileName)}${includeLine ? `#L${pos.line + 1}` : ""}`
         };
-    }
-
-    resolveSourceFile(filePath: string, relative: string): ts.SourceFile | undefined {
-        let res;
-        if (path.isAbsolute(filePath)) {
-            res = this.extractor.program.getSourceFile(path.join(filePath, "../", `${relative}.ts`));
-            if (!res) res = this.extractor.program.getSourceFile(path.join(filePath, "../", `${relative}/index.ts`));
-            if (!res) res = this.extractor.program.getSourceFile(path.join(filePath, "../", `${relative.slice(0, -3)}.ts`));
-            if (!res) res = this.extractor.program.getSourceFile(path.join(filePath, "../", `${relative}.tsx`));
-            if (!res) res = this.extractor.program.getSourceFile(path.join(filePath, "../", `${relative}/index.tsx`));
-            if (!res) res = this.extractor.program.getSourceFile(path.join(filePath, "../", `${relative.slice(0, -3)}.tsx`));
-        } else {
-            res = this.extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}.ts`));
-            if (!res) res = this.extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}/index.ts`));
-            if (!res) res = this.extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative.slice(0, -3)}.ts`));
-            if (!res) res = this.extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}.tsx`));
-            if (!res) res = this.extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}/index.tsx`));
-            if (!res) res = this.extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative.slice(0, -3)}.tsx`));
-        }
-        return res;
     }
 
     moduleToJSON(module = this.module): Record<string, unknown> {

@@ -1,21 +1,5 @@
 import ts from "typescript";
-
-/**
- * If the `references` property is an empty array, then everything (*) is exported from the module.
- */
-export interface ModuleExport {
-    module: ReferenceType,
-    alias?: string,
-    references: Array<AliasedReference>,
-    /**
-     * If the module re-exports a re-export with an "alias". Confusing, I know.
-     */
-    reExportsReExport?: string
-}
-
-export interface AliasedReference extends ReferenceType {
-    alias?: string
-}
+import { FileExports } from "./ExportHandler";
 
 export interface Module {
     name: string,
@@ -29,9 +13,9 @@ export interface Module {
     repository?: string,
     isGlobal?: boolean,
     isNamespace?: boolean,
-    reExports: Array<ModuleExport>,
-    exports: Array<AliasedReference>,
-    path: Array<string>
+    exports: Record<string, FileExports>,
+    path: Array<string>,
+    ref: ReferenceType
 }
 
 export interface JSDocTag {
@@ -85,17 +69,18 @@ export function createModule(name: string, path: Array<string>, isGlobal?: boole
         types: [],
         enums: [],
         constants: [],
-        reExports: [],
-        exports: [],
         isGlobal,
         isNamespace,
-        path
+        exports: {},
+        path,
+        ref: {
+            kind: TypeReferenceKinds.NAMESPACE_OR_MODULE,
+            path,
+            name
+        }
     };
 }
 
-export function createModuleRef(mod: Module) : ReferenceType {
-    return { kind: TypeReferenceKinds.NAMESPACE_OR_MODULE, path: mod.path, name: mod.name }; 
-}
 
 export const enum TypeKinds {
     REFERENCE,
@@ -160,7 +145,7 @@ export interface ReferenceType {
      */
     displayName?: string,
     /**
-     * The module path to the reference.
+     * The module path to the reference. External references, unknown references and stringified unknown references don't have a path.
      */
     path?: Array<string>,
     /**
