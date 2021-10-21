@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { Module, Project, ReferenceType, TypescriptExtractor } from ".";
 import path from "path";
 import ts from "typescript";
@@ -39,7 +40,11 @@ export interface ExportedElement {
     /**
      * If this is true, then the references are coming from the same module. 
      */
-    sameModule: boolean
+    sameModule: boolean,
+    /**
+     * If the module re-exports a re-export with an "alias". Confusing, I know.
+     */
+    reExportsOfReExport?: string
 }
 
 
@@ -132,10 +137,18 @@ export function registerOtherExportOrReExport(project: Project, currentModule: M
     const originModule = project.getOrCreateModule(originSourceFile.fileName);
 
     project.visitor(originSourceFile, originModule);
+
     // If the first declaration of the symbol is a source file, then the expored symbol is a namespace import
     // import * as B from "..."; export { B };
     if (ts.isSourceFile(realObj.declarations![0])) {
-        addReExport(currentModule, thisSourceFile, originSourceFile.fileName, {
+        //if (val.name === "Endpoints") console.log(originModule.exports[originFileName]?.reExports, originModule.name, originFileName);
+        if (originModule.exports.index?.reExports.some(ex => ex.namespace === val.name)) addReExport(currentModule, thisSourceFile, originSourceFile.fileName, {
+            module: originModule.ref,
+            references: [],
+            sameModule: currentModule === originModule,
+            reExportsOfReExport: val.name
+        });
+        else addReExport(currentModule, thisSourceFile, originSourceFile.fileName, {
             namespace: val.name,
             module: originModule.ref,
             references: [],
@@ -143,11 +156,23 @@ export function registerOtherExportOrReExport(project: Project, currentModule: M
         });
         return;
     }
-    const alias = (val.name === realObj.name) ? undefined : val.name;
+
     const reference = project.extractor.refs.get(realObj);
-    if (!reference) return;
+    const alias = (val.name === realObj.name) ? undefined : val.name;
+
     const thisFileName = getFilenameFromPath(thisSourceFile);
     const originFileName = getFilenameFromPath(originSourceFile.fileName);
+
+    if (!reference) {
+        currentModule.exports[thisFileName].reExports.push({
+            module: originModule.ref,
+            filename: originFileName === "index" ? undefined : originFileName,
+            references: [],
+            sameModule: currentModule === originModule,
+            reExportsOfReExport: val.name
+        });
+        return;
+    }
 
     if (!currentModule.exports[thisFileName]) currentModule.exports[thisFileName] = {
         exports: [], reExports: [
@@ -158,7 +183,7 @@ export function registerOtherExportOrReExport(project: Project, currentModule: M
                 sameModule: currentModule === originModule
             }
         ]
-    }
+    };
     else {
         const reExport = currentModule.exports[thisFileName].reExports.find(r => r.module === originModule.ref && r.filename === originFileName);
         if (!reExport) currentModule.exports[thisFileName].reExports.push({
@@ -185,13 +210,13 @@ export function resolveSourceFile(extractor: TypescriptExtractor, filePath: stri
     return res;
 }
 
-export function addExport(module: Module, fileName: string, ex: AliasedReference) {
+export function addExport(module: Module, fileName: string, ex: AliasedReference) : void {
     const last = getFilenameFromPath(fileName);
     if (!module.exports[last]) module.exports[last] = { exports: [ex], reExports: [] };
     else module.exports[last].exports.push(ex);
 }
 
-export function addReExport(module: Module, fileName: string, origin: string, ex: ExportedElement) {
+export function addReExport(module: Module, fileName: string, origin: string, ex: ExportedElement) : void {
     const last = getFilenameFromPath(fileName);
     const originLast = getFilenameFromPath(origin);
     if (originLast !== "index") ex.filename = originLast;
