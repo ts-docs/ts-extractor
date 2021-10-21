@@ -185,24 +185,6 @@ export function resolveSourceFile(extractor: TypescriptExtractor, filePath: stri
     return res;
 }
 
-export function getExportsOfReExports(re: ExportedElement, projects: Array<Project>): FileExports | undefined {
-    let project, path;
-    if (projects.length === 1) {
-        project = projects[0];
-        path = re.module.path!;
-    } else {
-        project = projects.find(pr => pr.module.name === re.module.path![0]);
-        if (!project) return;
-        path = re.module.path!.slice(1);
-    }
-    let mod = project.module;
-    for (let i = 0; i < path.length; i++) {
-        mod = mod.modules.get(path[i])!;
-    }
-    if (re.filename) return mod.exports[re.filename];
-    return mod.exports.index;
-}
-
 export function addExport(module: Module, fileName: string, ex: AliasedReference) {
     const last = getFilenameFromPath(fileName);
     if (!module.exports[last]) module.exports[last] = { exports: [ex], reExports: [] };
