@@ -337,7 +337,7 @@ export class Project {
             implementsInt = implementsClause && implementsClause.types.map(impl => this.resolveType(impl));
         }
         let id;
-        if (currentModule.classes.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
+        if (currentModule.interfaces.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.interfaces.push({
             name: sym.name,
             extends: extendsInt,
@@ -387,7 +387,7 @@ export class Project {
             if (jsDocData) jsDoc.push(...jsDocData);
         }
         let id;
-        if (currentModule.classes.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
+        if (currentModule.enums.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.enums.push({
             name: sym.name,
             isConst: Boolean(firstDecl.modifiers && firstDecl.modifiers.some(mod => mod.kind === ts.SyntaxKind.ConstKeyword)),
@@ -409,7 +409,7 @@ export class Project {
         };
         this.extractor.refs.set(sym, ref);
         let id;
-        if (currentModule.classes.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
+        if (currentModule.types.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.types.push({
             name: sym.name,
             value: this.resolveType(decl.type),
@@ -426,9 +426,10 @@ export class Project {
         const firstDecl = symbol.declarations![0]! as ts.ModuleDeclaration;
         const newMod = createModule(firstDecl.name.text, [...currentModule.path, firstDecl.name.text], false, this.getLOC(currentModule, firstDecl).sourceFile, true);
         newMod.exports.index = { exports: [], reExports: [] };
-        const namespaceLoc = this.getLOC(newMod, firstDecl);
+        const namespaceLoc = this.getLOC(currentModule, firstDecl);
         newMod.repository = namespaceLoc.sourceFile;
         currentModule.modules.set(newMod.name, newMod);
+        newMod.jsDoc = this.getJSDocData(firstDecl);
         const ref = {
             name: symbol.name,
             path: currentModule.path,
@@ -457,7 +458,7 @@ export class Project {
         const maxLen = this.extractor.settings.maxConstantTextLength || 256;
         const text = decl.initializer && decl.initializer.getText();
         let id;
-        if (currentModule.classes.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
+        if (currentModule.constants.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.constants.push({
             name: decl.name.getText(),
             loc: this.getLOC(currentModule, decl),
@@ -487,7 +488,7 @@ export class Project {
             });
         }
         let id;
-        if (currentModule.classes.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
+        if (currentModule.functions.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.functions.push({
             name: sym.name,
             signatures,
@@ -929,7 +930,7 @@ export class Project {
     getLOC(currentModule: Module, node: ts.Node, sourceFile = node.getSourceFile(), includeLine = true): Loc {
         const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
         if (!currentModule.repository) return { pos };
-        if (currentModule.isNamespace) return { pos, sourceFile: `${currentModule.repository}#L${pos.line + 1}` };
+        if (currentModule.isNamespace) return { pos, sourceFile: `${currentModule.repository.slice(0, currentModule.repository.indexOf("#"))}#L${pos.line + 1}` };
         return {
             pos,
             sourceFile: currentModule.repository && `${currentModule.repository}/${getLastItemFromPath(sourceFile.fileName)}${includeLine ? `#L${pos.line + 1}` : ""}`

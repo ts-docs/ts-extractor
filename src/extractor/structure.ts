@@ -15,7 +15,11 @@ export interface Module {
     isNamespace?: boolean,
     exports: Record<string, FileExports>,
     path: Array<string>,
-    ref: ReferenceType
+    ref: ReferenceType,
+    /**
+     * Only present in namespace modules
+     */
+    jsDoc?: Array<JSDocData>,
 }
 
 export interface JSDocTag {
