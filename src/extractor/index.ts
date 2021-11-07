@@ -110,7 +110,7 @@ export class TypescriptExtractor {
         const packageJSONs = new Map<string, PackageJSON>();
         for (let i=0; i < this.settings.entryPoints.length; i++) {
             let entryPoint = this.settings.entryPoints[i];
-            if (!entryPoint.endsWith("ts")) entryPoint += ".ts";
+            if (!entryPoint.endsWith("ts") && !entryPoint.endsWith("tsx")) entryPoint += ".ts";
             if (!path.isAbsolute(entryPoint)) entryPoint = path.join(cwd, entryPoint);
             if (!fs.existsSync(entryPoint)) throw new Error(`Couldn't find file '${entryPoint}'`);
             const packageJSON = findPackageJSON(entryPoint);

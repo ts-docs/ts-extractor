@@ -5,8 +5,7 @@ import ts from "typescript";
 import { getFilenameFromPath } from "../utils";
 
 export interface AliasedReference extends ReferenceType {
-    alias?: string,
-    preview?: string
+    alias?: string
 }
 
 export interface ExportedElement {
@@ -141,7 +140,6 @@ export function registerOtherExportOrReExport(project: Project, currentModule: M
     // If the first declaration of the symbol is a source file, then the expored symbol is a namespace import
     // import * as B from "..."; export { B };
     if (ts.isSourceFile(realObj.declarations![0])) {
-        //if (val.name === "Endpoints") console.log(originModule.exports[originFileName]?.reExports, originModule.name, originFileName);
         if (originModule.exports.index?.reExports.some(ex => ex.namespace === val.name)) addReExport(currentModule, thisSourceFile, originSourceFile.fileName, {
             module: originModule.ref,
             references: [],
@@ -202,10 +200,16 @@ export function resolveSourceFile(extractor: TypescriptExtractor, filePath: stri
         res = extractor.program.getSourceFile(path.join(filePath, "../", `${relative}.ts`));
         if (!res) res = extractor.program.getSourceFile(path.join(filePath, "../", `${relative}/index.ts`));
         if (!res) res = extractor.program.getSourceFile(path.join(filePath, "../", `${relative.slice(0, -3)}.ts`));
+        if (!res) res = extractor.program.getSourceFile(path.join(filePath, "../", `${relative}.tsx`));
+        if (!res) res = extractor.program.getSourceFile(path.join(filePath, "../", `${relative}/index.tsx`));
+        if (!res) res = extractor.program.getSourceFile(path.join(filePath, "../", `${relative.slice(0, -3)}.tsx`));
     } else {
         res = extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}.ts`));
         if (!res) res = extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}/index.ts`));
         if (!res) res = extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative.slice(0, -3)}.ts`));
+        if (!res) res = extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}.tsx`));
+        if (!res) res = extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}/index.tsx`));
+        if (!res) res = extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative.slice(0, -3)}.tsx`));
     }
     return res;
 }
