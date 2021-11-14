@@ -202,8 +202,14 @@ export interface Property {
     exclamation?: boolean,
 }
 
-export interface ClassProperty extends Omit<ClassMember, "name">, Property {
+/**
+ * Only [[ObjectProperty.prop]] and [[ObjectProperty.index]] are possible. 
+ * The [[ClassProperty.isReadonly as readonly]] property is only present if the [[ClassProperty.index]]
+ * property is not undefined.
+ */
+export interface ClassProperty extends Omit<ClassMember, "name">, ObjectProperty {
     exclamation?: boolean,
+    isReadonly?: boolean
 }
 
 export interface FunctionParameter {

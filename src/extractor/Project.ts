@@ -4,7 +4,7 @@ import ts from "typescript";
 import { ObjectProperty, TypescriptExtractor } from ".";
 import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON, } from "../utils";
 import { registerDirectExport, registerDirectReExport, registerNamespaceReExport, registerOtherExportOrReExport } from "./ExportHandler";
-import { ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, FunctionParameter, IndexSignatureDeclaration, JSDocData, JSDocTag, Loc, Module, ObjectLiteral, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
+import { ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, FunctionParameter, JSDocData, JSDocTag, Loc, Module, ObjectLiteral, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
 
 export class Project {
     repository?: string
@@ -177,7 +177,7 @@ export class Project {
             kind: TypeReferenceKinds.CLASS,
         };
         this.extractor.refs.set(symbol, ref);
-        const properties: Array<ClassProperty | IndexSignatureDeclaration> = [];
+        const properties: Array<ClassProperty> = [];
         const methods = new Map<string, ClassMethod>();
         let constructor;
         for (const member of decl.members) {
@@ -193,23 +193,28 @@ export class Project {
             }
             if (ts.isIndexSignatureDeclaration(member)) {
                 properties.push({
-                    key: member.parameters[0]?.type && this.resolveType(member.parameters[0].type),
-                    type: this.resolveType(member.type),
-                    isOptional: Boolean(member.questionToken),
-                    isStatic, isReadonly
+                    index: {
+                        key: member.parameters[0]?.type && this.resolveType(member.parameters[0].type),
+                        type: this.resolveType(member.type)
+                    },
+                    isStatic, isReadonly,
+                    loc: this.getLOC(currentModule, member),
+                    jsDoc: this.getJSDocData(member)
                 });
             }
             if (ts.isPropertyDeclaration(member)) {
                 const computedName = ts.isComputedPropertyName(member.name) && this.resolveExpressionToType(member.name.expression);
                 properties.push({
-                    name: computedName || member.name.getText(),
-                    rawName: member.name.getText(),
-                    type: member.type && this.resolveType(member.type),
-                    loc: this.getLOC(currentModule, member),
-                    isOptional: Boolean(member.questionToken),
+                    prop: {
+                        name: computedName || member.name.getText(),
+                        rawName: member.name.getText(),
+                        type: member.type && this.resolveType(member.type),
+                        isOptional: Boolean(member.questionToken),
+                        initializer: member.initializer && this.resolveExpressionToType(member.initializer)
+                    },
                     isPrivate, isProtected, isStatic, isReadonly, isAbstract,
                     jsDoc: this.getJSDocData(member),
-                    initializer: member.initializer && this.resolveExpressionToType(member.initializer)
+                    loc: this.getLOC(currentModule, member)
                 });
             }
             else if (ts.isConstructorDeclaration(member)) {
