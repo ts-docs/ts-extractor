@@ -240,7 +240,7 @@ export type ClassConstructor = Omit<FunctionDecl, "name">
 
 export interface ClassDecl extends Node {
     typeParameters?: Array<TypeParameter>,
-    properties: Array<ClassProperty|IndexSignatureDeclaration>,
+    properties: Array<ClassProperty>,
     methods: Array<ClassMethod>,
     extends?: Reference,
     _constructor?: ClassConstructor,
