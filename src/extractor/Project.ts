@@ -610,7 +610,11 @@ export class Project {
         }
         else if (ts.isTupleTypeNode(type)) {
             return {
-                types: type.elements.map(el => this.resolveType(el)),
+                types: type.elements.map(el => {
+                    if (ts.isNamedTupleMember(el)) return { type: this.resolveType(el.type), name: el.name.text, spread: Boolean(el.dotDotDotToken), optional: Boolean(el.questionToken) };
+                    if (ts.isRestTypeNode(el)) return { type: this.resolveType(el.type), spread: true };
+                    return { type: this.resolveType(el) };
+                }),
                 kind: TypeKinds.TUPLE
             };
         }
@@ -618,7 +622,8 @@ export class Project {
             if (ts.isThisTypeNode(type.parameterName)) return { kind: TypeKinds.TYPE_PREDICATE, parameter: { kind: TypeKinds.THIS }, type: type.type && this.resolveType(type.type) };
             else return {
                 kind: TypeKinds.TYPE_PREDICATE,
-                parameter: type.parameterName.text
+                parameter: type.parameterName.text,
+                type: type.type && this.resolveType(type.type)
             };
         }
         else if (ts.isTypeOperatorNode(type)) {
@@ -647,7 +652,7 @@ export class Project {
         else if (ts.isInferTypeNode(type)) {
             return {
                 kind: TypeKinds.INFER_TYPE,
-                typeParameter: this.resolveTypeParameters(type.typeParameter)
+                typeParameter: { kind: TypeKinds.REFERENCE, type: { kind: TypeReferenceKinds.TYPE_PARAMETER, name: type.typeParameter.name.text }}
             };
         }
         else if (ts.isParenthesizedTypeNode(type)) return this.resolveType(type.type);

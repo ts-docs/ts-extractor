@@ -302,11 +302,18 @@ export interface TypeOperator extends BaseType {
     type: Type
 }
 
+export interface TupleMember {
+    type: Type,
+    spread?: boolean,
+    name?: string,
+    optional?: boolean
+}
+
 /**
  * `[a, b, c]`
  */
 export interface Tuple extends BaseType {
-    types: Array<Type>,
+    types: Array<TupleMember>,
 }
 
 /**
@@ -431,5 +438,5 @@ export interface TypePredicateType extends BaseType {
 }
 
 export interface InferType extends BaseType {
-    typeParameter: TypeParameter
+    typeParameter: Reference
 }
