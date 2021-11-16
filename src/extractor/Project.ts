@@ -169,7 +169,7 @@ export class Project {
     }
 
     handleClassDecl(symbol: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
-        const decl = symbol.declarations![0] as ts.ClassDeclaration;
+        const decl = symbol.declarations!.find(decl => ts.isClassDeclaration(decl)) as ts.ClassDeclaration;
         const name = symbol.name;
         const ref: ReferenceType = {
             name,
@@ -177,6 +177,10 @@ export class Project {
             kind: TypeReferenceKinds.CLASS,
         };
         this.extractor.refs.set(symbol, ref);
+        if (this.isInternalNode(decl)) {
+            ref.kind = TypeReferenceKinds.INTERNAL;
+            return ref;
+        }
         const properties: Array<ClassProperty> = [];
         const methods = new Map<string, ClassMethod>();
         let constructor;
@@ -203,6 +207,7 @@ export class Project {
                 });
             }
             if (ts.isPropertyDeclaration(member)) {
+                if (this.isInternalNode(member)) continue;
                 const computedName = ts.isComputedPropertyName(member.name) && this.resolveExpressionToType(member.name.expression);
                 properties.push({
                     prop: {
@@ -218,6 +223,7 @@ export class Project {
                 });
             }
             else if (ts.isConstructorDeclaration(member)) {
+                if (this.isInternalNode(member)) continue;
                 if (!constructor) {
                     constructor = {
                         loc: this.getLOC(currentModule, member),
@@ -232,6 +238,7 @@ export class Project {
                 }
             }
             else if (ts.isMethodDeclaration(member)) {
+                if (this.isInternalNode(member)) continue;
                 const methodName = member.name.getText();
                 const method = methods.get(methodName);
                 const computedName = ts.isComputedPropertyName(member.name) ? this.resolveExpressionToType(member.name.expression) : undefined;
@@ -261,6 +268,7 @@ export class Project {
                 }
             }
             else if (ts.isGetAccessor(member)) {
+                if (this.isInternalNode(member)) continue;
                 const methodName = member.name.getText();
                 const computedName = ts.isComputedPropertyName(member.name) ? this.resolveExpressionToType(member.name.expression) : undefined;
                 methods.set(methodName, {
@@ -277,6 +285,7 @@ export class Project {
                 });
             }
             else if (ts.isSetAccessor(member)) {
+                if (this.isInternalNode(member)) continue;
                 const methodName = member.name.getText();
                 const computedName = ts.isComputedPropertyName(member.name) ? this.resolveExpressionToType(member.name.expression) : undefined;
                 methods.set(methodName, {
@@ -324,12 +333,19 @@ export class Project {
             kind: TypeReferenceKinds.INTERFACE
         };
         this.extractor.refs.set(sym, ref);
+        if (this.isInternalNode(firstDecl)) {
+            ref.kind = TypeReferenceKinds.INTERNAL;
+            return ref;
+        }
         const properties = [];
         const loc = [];
         const jsDoc = [];
         for (const decl of (sym.declarations as Array<ts.Node>)) {
-            if (!ts.isInterfaceDeclaration(decl)) return;
-            for (const member of (decl.members || [])) properties.push(this.resolveObjectProperty(member));
+            if (!ts.isInterfaceDeclaration(decl)) continue;
+            for (const member of (decl.members || [])) {
+                if (this.isInternalNode(member)) continue;
+                properties.push(this.resolveObjectProperty(member));
+            }
             loc.push(this.getLOC(currentModule, decl));
             const jsdoc = this.getJSDocData(decl);
             if (jsdoc) jsDoc.push(...jsdoc);
@@ -365,13 +381,18 @@ export class Project {
             kind: TypeReferenceKinds.ENUM
         };
         this.extractor.refs.set(sym, ref);
+        if (this.isInternalNode(firstDecl)) {
+            ref.kind = TypeReferenceKinds.INTERNAL;
+            return ref;
+        }
         const members = [];
         const loc = [];
         const jsDoc = [];
         for (const decl of (sym.declarations as Array<ts.EnumDeclaration>)) {
             for (const el of (decl.members || [])) {
+                const isInternal = this.isInternalNode(el);
                 const name = el.name.getText();
-                members.push({
+                if (!isInternal) members.push({
                     name,
                     initializer: el.initializer && this.resolveExpressionToType(el.initializer),
                     loc: this.getLOC(currentModule, el),
@@ -383,7 +404,7 @@ export class Project {
                         name: sym.name,
                         displayName: name,
                         path: currentModule.path,
-                        kind: TypeReferenceKinds.ENUM_MEMBER
+                        kind: isInternal ? TypeReferenceKinds.INTERNAL : TypeReferenceKinds.ENUM_MEMBER
                     });
                 }
             }
@@ -413,6 +434,10 @@ export class Project {
             kind: TypeReferenceKinds.TYPE_ALIAS
         };
         this.extractor.refs.set(sym, ref);
+        if (this.isInternalNode(decl)) {
+            ref.kind = TypeReferenceKinds.INTERNAL;
+            return ref;
+        }
         let id;
         if (currentModule.types.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.types.push({
@@ -428,7 +453,7 @@ export class Project {
     }
 
     handleNamespaceDecl(symbol: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
-        const firstDecl = symbol.declarations![0]! as ts.ModuleDeclaration;
+        const firstDecl = symbol.declarations!.find(t => ts.isModuleDeclaration(t)) as ts.ModuleDeclaration;
         const newMod = createModule(firstDecl.name.text, [...currentModule.path, firstDecl.name.text], false, this.getLOC(currentModule, firstDecl).sourceFile, true);
         newMod.exports.index = { exports: [], reExports: [] };
         const namespaceLoc = this.getLOC(currentModule, firstDecl);
@@ -460,6 +485,10 @@ export class Project {
             path: currentModule.path,
         };
         this.extractor.refs.set(sym, ref);
+        if (this.isInternalNode(decl)) {
+            ref.kind = TypeReferenceKinds.INTERNAL;
+            return ref;
+        }
         const maxLen = this.extractor.settings.maxConstantTextLength || 256;
         const text = decl.initializer && decl.initializer.getText();
         let id;
@@ -483,6 +512,10 @@ export class Project {
             kind: TypeReferenceKinds.FUNCTION
         };
         this.extractor.refs.set(sym, ref);
+        if (this.isInternalNode(lastDecl)) {
+            ref.kind = TypeReferenceKinds.INTERNAL;
+            return ref;
+        }
         const signatures = [];
         for (const decl of (sym.declarations as Array<ts.FunctionDeclaration>)) {
             signatures.push({
@@ -958,6 +991,11 @@ export class Project {
             homepage: this.homepage,
             module: this.moduleToJSON()
         };
+    }
+
+    isInternalNode(node: ts.Node) : boolean|undefined {
+        //@ts-expect-error Internal access
+        return this.extractor.settings.stripInternal && node.jsDoc?.some(t => t.tags && t.tags.some(tag => tag.tagName.text === "internal"));
     }
 
 }

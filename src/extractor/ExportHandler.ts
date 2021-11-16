@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { Module, Project, ReferenceType, TypescriptExtractor } from ".";
+import { Module, Project, ReferenceType, TypeReferenceKinds, TypescriptExtractor } from ".";
 import path from "path";
 import ts from "typescript";
 import { getFilenameFromPath } from "../utils";
@@ -119,6 +119,7 @@ export function registerNamespaceReExport(project: Project, currentModule: Modul
 }
 
 export function registerDirectExport(fileName: string, currentModule: Module, ref: ReferenceType): void {
+    if (ref.kind === TypeReferenceKinds.INTERNAL) return;
     addExport(currentModule, fileName, ref);
 }
 
@@ -172,6 +173,8 @@ export function registerOtherExportOrReExport(project: Project, currentModule: M
         return;
     }
 
+    if (reference.kind === TypeReferenceKinds.INTERNAL) return;
+
     if (!currentModule.exports[thisFileName]) currentModule.exports[thisFileName] = {
         exports: [], reExports: [
             {
@@ -197,19 +200,27 @@ export function registerOtherExportOrReExport(project: Project, currentModule: M
 export function resolveSourceFile(extractor: TypescriptExtractor, filePath: string, relative: string): ts.SourceFile | undefined {
     let res;
     if (path.isAbsolute(filePath)) {
-        res = extractor.program.getSourceFile(path.join(filePath, "../", `${relative}.ts`));
-        if (!res) res = extractor.program.getSourceFile(path.join(filePath, "../", `${relative}/index.ts`));
-        if (!res) res = extractor.program.getSourceFile(path.join(filePath, "../", `${relative.slice(0, -3)}.ts`));
-        if (!res) res = extractor.program.getSourceFile(path.join(filePath, "../", `${relative}.tsx`));
-        if (!res) res = extractor.program.getSourceFile(path.join(filePath, "../", `${relative}/index.tsx`));
-        if (!res) res = extractor.program.getSourceFile(path.join(filePath, "../", `${relative.slice(0, -3)}.tsx`));
+        const p = path.join(filePath, "../");
+        res = extractor.program.getSourceFile(path.join(p, `${relative}.ts`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative}/index.ts`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative.slice(0, -3)}.ts`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative}.tsx`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative}/index.tsx`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative.slice(0, -3)}.tsx`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative}.d.ts`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative}/index.d.ts`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative.slice(0, -3)}.d.ts`));
     } else {
-        res = extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}.ts`));
-        if (!res) res = extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}/index.ts`));
-        if (!res) res = extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative.slice(0, -3)}.ts`));
-        if (!res) res = extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}.tsx`));
-        if (!res) res = extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative}/index.tsx`));
-        if (!res) res = extractor.program.getSourceFile(path.join(process.cwd(), filePath, "../", `${relative.slice(0, -3)}.tsx`));
+        const p = path.join(process.cwd(), filePath, "../");
+        res = extractor.program.getSourceFile(path.join(p, `${relative}.ts`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative}/index.ts`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative.slice(0, -3)}.ts`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative}.tsx`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative}/index.tsx`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative.slice(0, -3)}.tsx`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative}.d.ts`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative}/index.d.ts`));
+        if (!res) res = extractor.program.getSourceFile(path.join(p, `${relative.slice(0, -3)}.d.ts`));
     }
     return res;
 }
@@ -224,7 +235,6 @@ export function addReExport(module: Module, fileName: string, origin: string, ex
     const last = getFilenameFromPath(fileName);
     const originLast = getFilenameFromPath(origin);
     if (originLast !== "index") ex.filename = originLast;
-
     if (!module.exports[last]) module.exports[last] = { exports: [], reExports: [ex] };
     else module.exports[last].reExports.push(ex);
 }

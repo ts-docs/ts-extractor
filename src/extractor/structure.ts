@@ -138,7 +138,8 @@ export const enum TypeReferenceKinds {
     STRINGIFIED_UNKNOWN,
     ENUM_MEMBER,
     NAMESPACE_OR_MODULE,
-    EXTERNAL
+    EXTERNAL,
+    INTERNAL
 }
 
 export interface ReferenceType {

@@ -55,7 +55,12 @@ export interface TypescriptExtractorSettings {
     /**
      * Path to which tsconfig.json file to use
      */
-    tsconfig?: string
+    tsconfig?: string,
+    /**
+     * If set to true, removes all `@internal` items from the documentation, but it still keeps references to them. This option will be automatically turned on if it's turned on in your
+     * `tsconfig.json` file. This option always overrides the one set in `tsconfig.json`.
+     */
+    stripInternal?: boolean
 }
 
 export class TypescriptExtractor {
@@ -105,6 +110,7 @@ export class TypescriptExtractor {
                 target: ts.ScriptTarget.ES2016
             };
         }
+        if (typeof this.settings.stripInternal === "undefined") this.settings.stripInternal = tsconfig.stripInternal;
         tsconfig.types = [];
         const packagesMap = new Map<string, string>(); // package name - package path
         const packageJSONs = new Map<string, PackageJSON>();
