@@ -49,7 +49,7 @@ export class Project {
         }
         if (!sym || !sym.exports) return;
         if (this.extractor.fileCache.has(fileName)) return;
-        
+
         const isCached = this.extractor.isCachedFile(fileName);
 
         // @ts-expect-error You should be able to do that
@@ -147,25 +147,26 @@ export class Project {
         }
 
         // TODO?: A symbol can both be an interface/type alias and a variable/function. 
-        if (hasBit(val.flags, ts.SymbolFlags.Class)) return this.handleClassDecl(val, currentModule, isCached);
-        else if (hasBit(val.flags, ts.SymbolFlags.Interface)) return this.handleInterfaceDecl(val, currentModule, isCached);
-        else if (hasBit(val.flags, ts.SymbolFlags.Enum)) return this.handleEnumDecl(val, currentModule, isCached);
-        else if (hasBit(val.flags, ts.SymbolFlags.TypeAlias)) return this.handleTypeAliasDecl(val, currentModule, isCached);
-        else if (hasBit(val.flags, ts.SymbolFlags.Module)) return this.handleNamespaceDecl(val, currentModule, isCached);
-        else if (hasBit(val.flags, ts.SymbolFlags.Variable) && !hasBit(val.flags, ts.SymbolFlags.FunctionScopedVariable)) return this.handleVariableDecl(val, currentModule, isCached);
-        else if (hasBit(val.flags, ts.SymbolFlags.Function)) return this.handleFunctionDecl(val, currentModule, isCached);
-        else if (hasBit(val.flags, ts.SymbolFlags.EnumMember)) {
+        let type;
+        if (hasBit(val.flags, ts.SymbolFlags.Interface)) type = this.handleInterfaceDecl(val, currentModule, isCached);
+        if (hasBit(val.flags, ts.SymbolFlags.Enum)) type = this.handleEnumDecl(val, currentModule, isCached);
+        if (hasBit(val.flags, ts.SymbolFlags.TypeAlias)) type = this.handleTypeAliasDecl(val, currentModule, isCached);
+        if (hasBit(val.flags, ts.SymbolFlags.Module)) type = this.handleNamespaceDecl(val, currentModule, isCached);
+        if (hasBit(val.flags, ts.SymbolFlags.Variable) && !hasBit(val.flags, ts.SymbolFlags.FunctionScopedVariable)) type = this.handleVariableDecl(val, currentModule, isCached);
+        if (hasBit(val.flags, ts.SymbolFlags.Function)) type = this.handleFunctionDecl(val, currentModule, isCached);
+        if (hasBit(val.flags, ts.SymbolFlags.Class)) type = this.handleClassDecl(val, currentModule, isCached);
+        if (hasBit(val.flags, ts.SymbolFlags.EnumMember)) {
             //@ts-expect-error Private property
             const parent = val.parent;
             if (!this.extractor.refs.has(parent)) this.handleEnumDecl(parent, currentModule, isCached);
-            return this.extractor.refs.get(val);
+            type = this.extractor.refs.get(val);
         }
-        else {
-            const aliased = this.resolveAliasedSymbol(val);
-            if (this.extractor.refs.has(aliased)) return this.extractor.refs.get(aliased);
-            if (aliased.declarations && aliased.declarations.length) return this.extractor.refs.findExternal(aliased);
-            return;
-        }
+        if (type) return type;
+        const aliased = this.resolveAliasedSymbol(val);
+        if (this.extractor.refs.has(aliased)) return this.extractor.refs.get(aliased);
+        if (aliased.declarations && aliased.declarations.length) return this.extractor.refs.findExternal(aliased);
+        return;
+
     }
 
     handleClassDecl(symbol: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
@@ -612,7 +613,8 @@ export class Project {
             return {
                 types: type.elements.map(el => {
                     if (ts.isNamedTupleMember(el)) return { type: this.resolveType(el.type), name: el.name.text, spread: Boolean(el.dotDotDotToken), optional: Boolean(el.questionToken) };
-                    if (ts.isRestTypeNode(el)) return { type: this.resolveType(el.type), spread: true };
+                    else if (ts.isRestTypeNode(el)) return { type: this.resolveType(el.type), spread: true };
+                    else if (ts.isOptionalTypeNode(el)) return { type: this.resolveType(el.type), optional: true };
                     return { type: this.resolveType(el) };
                 }),
                 kind: TypeKinds.TUPLE
@@ -652,7 +654,7 @@ export class Project {
         else if (ts.isInferTypeNode(type)) {
             return {
                 kind: TypeKinds.INFER_TYPE,
-                typeParameter: { kind: TypeKinds.REFERENCE, type: { kind: TypeReferenceKinds.TYPE_PARAMETER, name: type.typeParameter.name.text }}
+                typeParameter: { kind: TypeKinds.REFERENCE, type: { kind: TypeReferenceKinds.TYPE_PARAMETER, name: type.typeParameter.name.text } }
             };
         }
         else if (ts.isParenthesizedTypeNode(type)) return this.resolveType(type.type);
@@ -723,14 +725,14 @@ export class Project {
         case ts.SyntaxKind.BigIntLiteral:
         case ts.SyntaxKind.PrefixUnaryExpression:
         case ts.SyntaxKind.PostfixUnaryExpression:
-        case ts.SyntaxKind.NumericLiteral: return { name: type.getText(), kind: TypeKinds.NUMBER_LITERAL };
+        case ts.SyntaxKind.NumericLiteral: return { name: (type as ts.NumericLiteral).text, kind: TypeKinds.NUMBER_LITERAL };
         case ts.SyntaxKind.StringLiteral: return { name: (type as ts.StringLiteral).text, kind: TypeKinds.STRING_LITERAL };
-        case ts.SyntaxKind.RegularExpressionLiteral: return { name: type.getText(), kind: TypeKinds.REGEX_LITERAL };
+        case ts.SyntaxKind.RegularExpressionLiteral: return { name: (type as ts.RegularExpressionLiteral).text, kind: TypeKinds.REGEX_LITERAL };
         case ts.SyntaxKind.SymbolKeyword: return { kind: TypeKinds.SYMBOL };
         case ts.SyntaxKind.BigIntKeyword: return { kind: TypeKinds.BIGINT };
         case ts.SyntaxKind.NeverKeyword: return { kind: TypeKinds.NEVER };
         case ts.SyntaxKind.ObjectKeyword: return { kind: TypeKinds.OBJECT };
-        default: return { name: type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
+        default: return { name: type.pos === -1 ? "unknown" : type.getText(), kind: TypeKinds.STRINGIFIED_UNKNOWN };
         }
     }
 
@@ -754,8 +756,8 @@ export class Project {
             const computedName = ts.isComputedPropertyName(prop.name) && this.resolveExpressionToType(prop.name.expression);
             return {
                 prop: {
-                    name: computedName || prop.name.getText(),
-                    rawName: prop.name.getText(),
+                    name: computedName || (prop.name as ts.Identifier).text,
+                    rawName: (prop.name as ts.Identifier).text,
                     type: prop.type && this.resolveType(prop.type),
                     isOptional: Boolean(prop.questionToken),
                     isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword)
@@ -763,20 +765,23 @@ export class Project {
                 jsDoc: this.getJSDocData(prop)
             };
         }
-        else if (ts.isMethodSignature(prop)) return {
-            prop: {
-                name: prop.name.getText(),
-                rawName: prop.name.getText(),
-                type: {
-                    kind: TypeKinds.ARROW_FUNCTION,
-                    parameters: prop.parameters?.map(param => this.resolveParameter(param)),
-                    typeParameters: prop.typeParameters?.map(param => this.resolveTypeParameters(param)),
-                    returnType: prop.type && this.resolveType(prop.type)
+        else if (ts.isMethodSignature(prop)) {
+            const computedName = ts.isComputedPropertyName(prop.name) && this.resolveExpressionToType(prop.name.expression);
+            return {
+                prop: {
+                    name: computedName || (prop.name as ts.Identifier).text,
+                    rawName: (prop.name as ts.Identifier).text,
+                    type: {
+                        kind: TypeKinds.ARROW_FUNCTION,
+                        parameters: prop.parameters?.map(param => this.resolveParameter(param)),
+                        typeParameters: prop.typeParameters?.map(param => this.resolveTypeParameters(param)),
+                        returnType: prop.type && this.resolveType(prop.type)
+                    },
+                    isOptional: Boolean(prop.questionToken),
                 },
-                isOptional: Boolean(prop.questionToken),
-            },
-            jsDoc: this.getJSDocData(prop)
-        };
+                jsDoc: this.getJSDocData(prop)
+            };
+        }
         else if (ts.isCallSignatureDeclaration(prop)) return {
             call: {
                 parameters: prop.parameters?.map(param => this.resolveParameter(param)),
@@ -858,7 +863,7 @@ export class Project {
         else if (type.isNumberLiteral()) return { kind: TypeKinds.NUMBER_LITERAL, name: type.value.toString() };
         else if (type.isUnion()) return { kind: TypeKinds.UNION, types: type.types.map(v => this.resolveTypeType(v)) };
         else if (type.isIntersection()) return { kind: TypeKinds.INTERSECTION, types: type.types.map(v => this.resolveTypeType(v)) };
-        else if (hasBit(type.flags, ts.TypeFlags.Unknown)) return { kind: TypeKinds.UNKNOWN }; 
+        else if (hasBit(type.flags, ts.TypeFlags.Unknown)) return { kind: TypeKinds.UNKNOWN };
         else if (hasBit(type.flags, ts.TypeFlags.String)) return { kind: TypeKinds.STRING };
         else if (hasBit(type.flags, ts.TypeFlags.Boolean)) return { kind: TypeKinds.BOOLEAN };
         else if (hasBit(type.flags, ts.TypeFlags.Number)) return { kind: TypeKinds.NUMBER };
@@ -869,8 +874,12 @@ export class Project {
         else if (hasBit(type.flags, ts.TypeFlags.Any)) return { kind: TypeKinds.ANY };
         else if (hasBit(type.flags, ts.TypeFlags.ESSymbol)) return { kind: TypeKinds.SYMBOL };
         else if (hasBit(type.flags, ts.TypeFlags.BigIntLike)) return { kind: TypeKinds.BIGINT };
-        else if (this.extractor.checker.typeToTypeNode(type, undefined, undefined)?.kind === ts.SyntaxKind.ArrayType) return { kind: TypeKinds.ARRAY_TYPE, type: this.resolveTypeType(this.extractor.checker.getTypeArguments(type as unknown as ts.TypeReference)[0]) };
-        else if (type.symbol && type.symbol.name === "__object") {
+        const typeNode = this.extractor.checker.typeToTypeNode(type, undefined, undefined);
+        if (typeNode) {
+            if (typeNode.kind === ts.SyntaxKind.ArrayType) return { kind: TypeKinds.ARRAY_TYPE, type: this.resolveTypeType(this.extractor.checker.getTypeArguments(type as unknown as ts.TypeReference)[0]) };
+            else if (typeNode.kind === ts.SyntaxKind.TupleType) return this.resolveType(typeNode);
+        }
+        if (type.symbol && type.symbol.name === "__object") {
             const properties: Array<ObjectProperty> = [];
             for (const property of type.getProperties()) {
                 properties.push({
@@ -943,7 +952,7 @@ export class Project {
         return ts.getTextOfJSDocComment(tag.comment);
     }
 
-    resolveSymbolFileName(sym: ts.Symbol) : string {
+    resolveSymbolFileName(sym: ts.Symbol): string {
         return sym.name.slice(1, -1) + ".ts";
     }
 
@@ -998,7 +1007,7 @@ export class Project {
         };
     }
 
-    isInternalNode(node: ts.Node) : boolean|undefined {
+    isInternalNode(node: ts.Node): boolean | undefined {
         //@ts-expect-error Internal access
         return this.extractor.settings.stripInternal && node.jsDoc?.some(t => t.tags && t.tags.some(tag => tag.tagName.text === "internal"));
     }
