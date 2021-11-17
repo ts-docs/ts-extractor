@@ -35,6 +35,7 @@ export function findPackageJSON(basePath: string) : PackageJSON|undefined {
 }
 
 export function getRepository(packageJSON: PackageJSON) : string|undefined {
+    //ssh://git@
     const repository = packageJSON.contents.repository as Record<string, string>|string;
     if (!repository) return;
     if (typeof repository === "string") {
@@ -46,7 +47,7 @@ export function getRepository(packageJSON: PackageJSON) : string|undefined {
         let {type, url} = repository;
         const branch = getBranchName(packageJSON.path);
         // eslint-disable-next-line no-useless-escape
-        url = url.replace(new RegExp(`${type}:\/\/`, "g"), "https://");
+        url = url.replace(new RegExp(`${type}:\/\/|ssh://${type}@`, "g"), "https://");
         return `${url.replace(new RegExp(`${type}\\+|\\.${type}`, "g"), "")}/tree/${branch}${repository.directory || ""}`;
     }
 }

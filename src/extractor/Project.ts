@@ -146,12 +146,11 @@ export class Project {
             }
         }
 
-        // TODO?: A symbol can both be an interface/type alias and a variable/function. 
         let type;
+        if (hasBit(val.flags, ts.SymbolFlags.Module)) type = this.handleNamespaceDecl(val, currentModule, isCached);
         if (hasBit(val.flags, ts.SymbolFlags.Interface)) type = this.handleInterfaceDecl(val, currentModule, isCached);
         if (hasBit(val.flags, ts.SymbolFlags.Enum)) type = this.handleEnumDecl(val, currentModule, isCached);
         if (hasBit(val.flags, ts.SymbolFlags.TypeAlias)) type = this.handleTypeAliasDecl(val, currentModule, isCached);
-        if (hasBit(val.flags, ts.SymbolFlags.Module)) type = this.handleNamespaceDecl(val, currentModule, isCached);
         if (hasBit(val.flags, ts.SymbolFlags.Variable) && !hasBit(val.flags, ts.SymbolFlags.FunctionScopedVariable)) type = this.handleVariableDecl(val, currentModule, isCached);
         if (hasBit(val.flags, ts.SymbolFlags.Function)) type = this.handleFunctionDecl(val, currentModule, isCached);
         if (hasBit(val.flags, ts.SymbolFlags.Class)) type = this.handleClassDecl(val, currentModule, isCached);
@@ -212,8 +211,8 @@ export class Project {
                 const computedName = ts.isComputedPropertyName(member.name) && this.resolveExpressionToType(member.name.expression);
                 properties.push({
                     prop: {
-                        name: computedName || member.name.getText(),
-                        rawName: member.name.getText(),
+                        name: computedName || (member.name as ts.Identifier).text,
+                        rawName: (member.name as ts.Identifier).text,
                         type: member.type && this.resolveType(member.type),
                         isOptional: Boolean(member.questionToken),
                         initializer: member.initializer && this.resolveExpressionToType(member.initializer)
@@ -375,7 +374,7 @@ export class Project {
     }
 
     handleEnumDecl(sym: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
-        const firstDecl = sym.declarations![0];
+        const firstDecl = sym.declarations!.find(decl => ts.isEnumDeclaration(decl))!;
         const ref: ReferenceType = {
             name: sym.name,
             path: currentModule.path,
@@ -389,7 +388,8 @@ export class Project {
         const members = [];
         const loc = [];
         const jsDoc = [];
-        for (const decl of (sym.declarations as Array<ts.EnumDeclaration>)) {
+        for (const decl of sym.declarations!) {
+            if (!ts.isEnumDeclaration(decl)) continue;
             for (const el of (decl.members || [])) {
                 const isInternal = this.isInternalNode(el);
                 const name = el.name.getText();
@@ -471,6 +471,7 @@ export class Project {
         const areChildrenCached = isCached && symbol.declarations!.length === 1 ? true : undefined;
         // @ts-expect-error You should be able to do that
         for (const [, element] of symbol.exports) {
+            if (!hasBit(element.flags, ts.SymbolFlags.ModuleMember)) continue;
             const sym = this.handleSymbol(element, newMod, areChildrenCached);
             if (sym) newMod.exports.index.exports.push(sym);
         }
@@ -518,7 +519,8 @@ export class Project {
             return ref;
         }
         const signatures = [];
-        for (const decl of (sym.declarations as Array<ts.FunctionDeclaration>)) {
+        for (const decl of sym.declarations!) {
+            if (!ts.isFunctionDeclaration(decl)) continue;
             signatures.push({
                 returnType: this.resolveReturnType(decl),
                 typeParameters: decl.typeParameters?.map(param => this.resolveTypeParameters(param)),
