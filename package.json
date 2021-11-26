@@ -1,6 +1,6 @@
 {
   "name": "@ts-docs/extractor",
-  "version": "2.3.8",
+  "version": "3.0.1",
   "description": "Extracts modules, classes, interfaces, enums, type aliases and constants from typescript projects.",
   "main": "dist/index.js",
   "devDependencies": {
@@ -8,7 +8,7 @@
     "@typescript-eslint/eslint-plugin": "^4.28.4",
     "@typescript-eslint/parser": "^4.28.4",
     "eslint": "^7.31.0",
-    "typescript": "^4.3.5"
+    "typescript": "^4.5.2"
   },
   "scripts": {
     "run": "tsc && node .",

@@ -60,7 +60,11 @@ export interface TypescriptExtractorSettings {
      * If set to true, removes all `@internal` items from the documentation, but it still keeps references to them. This option will be automatically turned on if it's turned on in your
      * `tsconfig.json` file. This option always overrides the one set in `tsconfig.json`.
      */
-    stripInternal?: boolean
+    stripInternal?: boolean,
+    /**
+     * If provided the extractor won't try to find the branch using `git`, and instead it will use the provided value.
+     */
+    branchName?: string
 }
 
 export class TypescriptExtractor {

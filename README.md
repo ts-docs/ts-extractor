@@ -20,50 +20,6 @@ Check out the documentation [here](https://ts-docs.github.io/ts-docs/m.extractor
 
 ```npm i @ts-docs/extractor```
 
-## 2.0 changes
-
-This version is faster and gathers way more accurate information.
-
-### Completely different API
-
-```ts
-// Before
-import { extract } from "...";
-const [modules, tsConfig] = extract(["./entry-point.ts"]);
-
-// Now
-import { TypescriptExtractor } from "...";
-const extractor = new TypescriptExtractor({
-    entryPoints: ["./entry-point.ts"],
-    externals: [],
-    maxConstantTextLength: 1024,
-    ignoreFolderNames: []
-});
-const projects = extractor.run();
-```
-
-### No more `ReferenceType#external`
-
-If there are multiple entry points, the global module will be at the first index in the `path` property of the reference. If there is only one entry point, the entire global module is omitted.
-
-### `Module#exports` and `Module#reExports`
-
-Extracts all exports and re-exports from every modules' entry point. If a module doesn't have an entry point (`index.ts`) then the arrays will be empty.
-
-### `InterfaceDecl#properties`
-
-Is now an array of objects like this:
-```js
-{
-    value: Property|IndexSignature|ArrowFunction,
-    jsDoc: JSDocData
-}
-```
-
-### `ReferenceType#id` and `Node#id`
-
-If, for example there are 2 or more classes with the same name, inside the same module, then their nodes and all their references will have a matching `id` property.
-
 ## Examples
 
 ### External References
@@ -76,7 +32,6 @@ const extractor = new TypescriptExtractor({
     externals: [
         {
             run: (name) => {
-                name = name.name || name; // name can either be a symbol or a string
                 switch (name) {
                     case "Response": return "https://github.com/node-fetch/node-fetch#class-response";
                     case "Request": return "https://github.com/node-fetch/node-fetch#class-request";

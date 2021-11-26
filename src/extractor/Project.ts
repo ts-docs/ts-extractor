@@ -23,7 +23,7 @@ export class Project {
     }) {
         folderPath.pop(); // Removes the file name
         this.baseDir = folderPath[folderPath.length - 1];
-        this.repository = getRepository(packageJSON);
+        this.repository = getRepository(packageJSON, extractor.settings.branchName);
         this.homepage = packageJSON.contents.homepage;
         this.version = packageJSON.contents.version;
         this.readme = getReadme(packageJSON.path);
@@ -455,6 +455,7 @@ export class Project {
 
     handleNamespaceDecl(symbol: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
         const firstDecl = symbol.declarations!.find(t => ts.isModuleDeclaration(t)) as ts.ModuleDeclaration;
+        if (!firstDecl) return;
         const newMod = createModule(firstDecl.name.text, [...currentModule.path, firstDecl.name.text], false, this.getLOC(currentModule, firstDecl).sourceFile, true);
         newMod.exports.index = { exports: [], reExports: [] };
         const namespaceLoc = this.getLOC(currentModule, firstDecl);
@@ -492,7 +493,12 @@ export class Project {
             return ref;
         }
         const maxLen = this.extractor.settings.maxConstantTextLength || 256;
-        const text = decl.initializer && decl.initializer.getText();
+        let text;
+        let type = decl.type && this.resolveType(decl.type);
+        if (decl.initializer) {
+            text = decl.initializer.getText();
+            if (!type && ts.isArrowFunction(decl.initializer)) type = this.resolveTypeType(this.extractor.checker.getTypeAtLocation(decl.initializer));
+        }
         let id;
         if (currentModule.constants.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.constants.push({
@@ -500,6 +506,7 @@ export class Project {
             loc: this.getLOC(currentModule, decl),
             jsDoc: this.getJSDocData(decl),
             content: text && (text.length > maxLen) ? text.slice(0, maxLen) : text,
+            type,
             id,
             isCached
         });

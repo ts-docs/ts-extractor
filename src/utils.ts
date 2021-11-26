@@ -34,18 +34,16 @@ export function findPackageJSON(basePath: string) : PackageJSON|undefined {
     return findPackageJSON(newPath);
 }
 
-export function getRepository(packageJSON: PackageJSON) : string|undefined {
-    //ssh://git@
+export function getRepository(packageJSON: PackageJSON, branchName?: string) : string|undefined {
     const repository = packageJSON.contents.repository as Record<string, string>|string;
     if (!repository) return;
+    const branch = branchName || getBranchName(packageJSON.path);
     if (typeof repository === "string") {
         const [type, link] = repository.split(":");
-        const branch = getBranchName(packageJSON.path);
         return `https://${type}.com/${link}/tree/${branch}`;
     } else {
         // eslint-disable-next-line prefer-const
         let {type, url} = repository;
-        const branch = getBranchName(packageJSON.path);
         // eslint-disable-next-line no-useless-escape
         url = url.replace(new RegExp(`${type}:\/\/|ssh://${type}@`, "g"), "https://");
         return `${url.replace(new RegExp(`${type}\\+|\\.${type}`, "g"), "")}/tree/${branch}${repository.directory || ""}`;

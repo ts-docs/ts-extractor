@@ -163,7 +163,7 @@ export function registerOtherExportOrReExport(project: Project, currentModule: M
     const originFileName = getFilenameFromPath(originSourceFile.fileName);
 
     if (!reference) {
-        currentModule.exports[thisFileName].reExports.push({
+        currentModule.exports[thisFileName]?.reExports.push({
             module: originModule.ref,
             filename: originFileName === "index" ? undefined : originFileName,
             references: [],
