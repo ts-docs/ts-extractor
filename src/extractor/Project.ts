@@ -64,7 +64,6 @@ export class Project {
                 // import { ... } from "..."; export { ... };
                 if (ts.isExportSpecifier(val.declarations[0])) registerOtherExportOrReExport(this, currentModule, val);
                 // export * as X from "...";
-                // Always goes to "reExports"
                 else if (ts.isNamespaceExport(val.declarations[0])) registerNamespaceReExport(this, currentModule, val);
                 // export ...
                 else {
@@ -135,6 +134,7 @@ export class Project {
             if (this.extractor.program.isSourceFileFromExternalLibrary(origin) || this.extractor.program.isSourceFileDefaultLibrary(origin)) return;
             const fileName = origin.fileName;
             currentModule = this.getOrCreateModule(fileName);
+            this.visitor(origin, currentModule);
             isCached = this.extractor.fileCache.has(fileName) ? this.extractor.fileCache.get(fileName) : this.extractor.settings.fileCache?.has(fileName);
         }
 
