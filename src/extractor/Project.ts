@@ -134,7 +134,6 @@ export class Project {
             if (this.extractor.program.isSourceFileFromExternalLibrary(origin) || this.extractor.program.isSourceFileDefaultLibrary(origin)) return;
             const fileName = origin.fileName;
             currentModule = this.getOrCreateModule(fileName);
-            this.visitor(origin, currentModule);
             isCached = this.extractor.fileCache.has(fileName) ? this.extractor.fileCache.get(fileName) : this.extractor.settings.fileCache?.has(fileName);
         }
 
