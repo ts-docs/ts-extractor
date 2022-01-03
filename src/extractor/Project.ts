@@ -394,7 +394,7 @@ export class Project {
                 const name = el.name.getText();
                 if (!isInternal) members.push({
                     name,
-                    initializer: el.initializer && this.resolveExpressionToType(el.initializer),
+                    initializer: el.initializer && this.resolveExpressionToType(el.initializer, false),
                     loc: this.getLOC(currentModule, el),
                     jsDoc: this.getJSDocData(el)
                 });
@@ -504,7 +504,7 @@ export class Project {
             name: decl.name.getText(),
             loc: this.getLOC(currentModule, decl),
             jsDoc: this.getJSDocData(decl),
-            content: text && (text.length > maxLen) ? text.slice(0, maxLen) : text,
+            content: text && (text.length > maxLen) ? `${text.slice(0, maxLen)}...` : text,
             type,
             id,
             isCached
@@ -835,7 +835,7 @@ export class Project {
         };
     }
 
-    resolveExpressionToType(exp: ts.Node): Type {
+    resolveExpressionToType(exp: ts.Node, tryType = true): Type {
         if (ts.isNewExpression(exp)) return this.resolveSymbolOrStr(exp.expression, exp.typeArguments?.map(arg => this.resolveType(arg)));
         switch (exp.kind) {
         case ts.SyntaxKind.BigIntLiteral:
@@ -849,6 +849,7 @@ export class Project {
         case ts.SyntaxKind.RegularExpressionLiteral: return { name: exp.getText(), kind: TypeKinds.REGEX_LITERAL };
         case ts.SyntaxKind.UndefinedKeyword: return { kind: TypeKinds.UNDEFINED };
         default: {
+            if (tryType) {
             const type = this.extractor.checker.getTypeAtLocation(exp);
             if (!type) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
             if (type.symbol) {
@@ -862,6 +863,8 @@ export class Project {
             const res = this.resolveTypeType(type);
             if (res.kind === TypeKinds.UNKNOWN || (res as Reference).type?.kind === TypeReferenceKinds.UNKNOWN) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
             return res;
+            }
+            return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
         }
         }
     }
