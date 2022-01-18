@@ -64,7 +64,11 @@ export interface TypescriptExtractorSettings {
     /**
      * If provided the extractor won't try to find the branch using `git`, and instead it will use the provided value.
      */
-    branchName?: string
+    branchName?: string,
+    /**
+     * A custom typescript compiler host.
+     */
+    compilerHost?: (tsconfig: ts.CompilerOptions) => ts.CompilerHost
 }
 
 export class TypescriptExtractor {
@@ -118,11 +122,13 @@ export class TypescriptExtractor {
         tsconfig.types = [];
         const packagesMap = new Map<string, string>(); // package name - package path
         const packageJSONs = new Map<string, PackageJSON>();
+        const host = createHost(tsconfig, packagesMap, this.settings, cwd);
+
         for (let i=0; i < this.settings.entryPoints.length; i++) {
             let entryPoint = this.settings.entryPoints[i];
             if (!entryPoint.endsWith("ts") && !entryPoint.endsWith("tsx")) entryPoint += ".ts";
             if (!path.isAbsolute(entryPoint)) entryPoint = path.join(cwd, entryPoint);
-            if (!fs.existsSync(entryPoint)) throw new Error(`Couldn't find file '${entryPoint}'`);
+            if (!host.fileExists(entryPoint)) throw new Error(`Couldn't find file '${entryPoint}'`);
             const packageJSON = findPackageJSON(entryPoint);
             if (!packageJSON) throw new Error("Couldn't find package.json file for one of the entry points");
             if (!packageJSON.contents.name) throw new Error("One of the entry points' package.json is missing a name");
@@ -131,7 +137,6 @@ export class TypescriptExtractor {
             this.settings.entryPoints[i] = entryPoint;
         }
 
-        const host = createHost(tsconfig, packagesMap, this.settings, cwd);
         this.program = ts.createProgram(this.settings.entryPoints, tsconfig, host);
 
         this.checker = this.program.getTypeChecker();

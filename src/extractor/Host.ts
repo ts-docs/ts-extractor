@@ -5,7 +5,7 @@ import { removePartOfPath } from "../utils";
 
 
 export function createHost(options: ts.CompilerOptions, customModules: Map<string, string>, extractorOptions: TypescriptExtractorSettings, cwd: string) : ts.CompilerHost {
-    const defaultHost = ts.createCompilerHost(options, true);
+    const defaultHost = extractorOptions.compilerHost ? extractorOptions.compilerHost(options) : ts.createCompilerHost(options, true);
     defaultHost.resolveModuleNames = (mods, file) => {
         const res: Array<ts.ResolvedModuleFull|undefined> = [];
         for (const module of mods) {
