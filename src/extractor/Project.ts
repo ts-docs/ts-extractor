@@ -850,19 +850,19 @@ export class Project {
         case ts.SyntaxKind.UndefinedKeyword: return { kind: TypeKinds.UNDEFINED };
         default: {
             if (tryType) {
-            const type = this.extractor.checker.getTypeAtLocation(exp);
-            if (!type) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
-            if (type.symbol) {
-                const aliased = this.resolveAliasedSymbol(type.symbol);
-                if (this.extractor.refs.has(aliased)) return {
-                    kind: TypeKinds.REFERENCE,
-                    type: this.extractor.refs.get(aliased)!,
-                    typeArguments: this.extractor.checker.getTypeArguments(type as ts.TypeReference)?.map(arg => this.resolveTypeType(arg))
-                };
-            }
-            const res = this.resolveTypeType(type);
-            if (res.kind === TypeKinds.UNKNOWN || (res as Reference).type?.kind === TypeReferenceKinds.UNKNOWN) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
-            return res;
+                const type = this.extractor.checker.getTypeAtLocation(exp);
+                if (!type) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
+                if (type.symbol) {
+                    const aliased = this.resolveAliasedSymbol(type.symbol);
+                    if (this.extractor.refs.has(aliased)) return {
+                        kind: TypeKinds.REFERENCE,
+                        type: this.extractor.refs.get(aliased)!,
+                        typeArguments: this.extractor.checker.getTypeArguments(type as ts.TypeReference)?.map(arg => this.resolveTypeType(arg))
+                    };
+                }
+                const res = this.resolveTypeType(type);
+                if (res.kind === TypeKinds.UNKNOWN || (res as Reference).type?.kind === TypeReferenceKinds.UNKNOWN) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
+                return res;
             }
             return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
         }

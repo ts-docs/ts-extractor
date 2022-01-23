@@ -8,11 +8,12 @@
     "@typescript-eslint/eslint-plugin": "^4.28.4",
     "@typescript-eslint/parser": "^4.28.4",
     "eslint": "^7.31.0",
+    "jest": "^27.4.7",
     "typescript": "^4.5.2"
   },
   "scripts": {
     "run": "tsc && node .",
-    "test": "tsc && node test/dist/index.js",
+    "test": "jest --collect-coverage",
     "prepublishOnly": "tsc"
   },
   "repository": {
