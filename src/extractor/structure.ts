@@ -142,6 +142,15 @@ export const enum TypeReferenceKinds {
     INTERNAL
 }
 
+export const enum DeclarationTypes {
+    CLASS,
+    INTERFACE,
+    ENUM,
+    FUNCTION,
+    CONSTANT,
+    TYPE_ALIAS
+}
+
 export interface ReferenceType {
     name: string,
     /**
@@ -237,7 +246,7 @@ export interface ClassMethod extends Omit<ClassMember, "name"> {
     rawName: string
 }
 
-export type ClassConstructor = Omit<FunctionDecl, "name">
+export type ClassConstructor = Omit<FunctionDecl, "name"|"kind">
 
 export interface ClassDecl extends Node {
     typeParameters?: Array<TypeParameter>,
@@ -246,12 +255,14 @@ export interface ClassDecl extends Node {
     extends?: Reference,
     _constructor?: ClassConstructor,
     implements?: Array<Type>,
-    isAbstract?: boolean
+    isAbstract?: boolean,
+    kind: DeclarationTypes.CLASS
 }
 
 export interface FunctionDecl extends Node {
     signatures: Array<FunctionSignature>,
     isGenerator?: boolean,
+    kind: DeclarationTypes.FUNCTION
 }
 
 export type ConstructorType = FunctionSignature & BaseType;
@@ -359,17 +370,20 @@ export interface InterfaceDecl extends NodeWithManyLOC {
     properties: Array<ObjectProperty>,
     typeParameters?: Array<TypeParameter>
     extends?: Array<Type>,
-    implements?: Array<Type>
+    implements?: Array<Type>,
+    kind: DeclarationTypes.INTERFACE
 }
 
 export interface TypeDecl extends Node {
     value?: Type,
-    typeParameters?: Array<TypeParameter>
+    typeParameters?: Array<TypeParameter>,
+    kind: DeclarationTypes.TYPE_ALIAS
 }
 
 export interface ConstantDecl extends Node {
     type?: Type|undefined,
-    content?: string
+    content?: string,
+    kind: DeclarationTypes.CONSTANT
 }
 
 export interface EnumMember extends Node {
@@ -378,7 +392,8 @@ export interface EnumMember extends Node {
 
 export interface EnumDecl extends NodeWithManyLOC {
     members: Array<EnumMember>
-    isConst: boolean
+    isConst: boolean,
+    kind: DeclarationTypes.ENUM
 }
 
 /**
@@ -440,3 +455,5 @@ export interface TypePredicateType extends BaseType {
 export interface InferType extends BaseType {
     typeParameter: Reference
 }
+
+export type Declaration = ClassDecl | InterfaceDecl | EnumDecl | FunctionDecl | TypeDecl | ConstantDecl;

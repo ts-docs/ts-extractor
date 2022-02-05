@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import path from "path";
 import ts from "typescript";
-import { ObjectProperty, TypescriptExtractor } from ".";
+import { DeclarationTypes, ObjectProperty, TypescriptExtractor } from ".";
 import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON, } from "../utils";
 import { registerDirectExport, registerDirectReExport, registerNamespaceReExport, registerOtherExportOrReExport } from "./ExportHandler";
 import { ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, FunctionParameter, JSDocData, JSDocTag, Loc, Module, ObjectLiteral, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
@@ -311,7 +311,8 @@ export class Project {
             jsDoc: this.getJSDocData(decl),
             isAbstract: decl.modifiers && decl.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
             _constructor: constructor,
-            isCached
+            isCached,
+            kind: DeclarationTypes.CLASS
         };
         if (decl.heritageClauses) {
             const extendsClause = decl.heritageClauses.find(clause => clause.token === ts.SyntaxKind.ExtendsKeyword);
@@ -367,7 +368,8 @@ export class Project {
             jsDoc,
             id,
             typeParameters: firstDecl.typeParameters && firstDecl.typeParameters.map(p => this.resolveTypeParameters(p)),
-            isCached: (isCached && sym.declarations!.length === 1) ? true : undefined
+            isCached: (isCached && sym.declarations!.length === 1) ? true : undefined,
+            kind: DeclarationTypes.INTERFACE
         });
         return ref;
     }
@@ -421,7 +423,8 @@ export class Project {
             jsDoc,
             members,
             id,
-            isCached: (isCached && sym.declarations!.length === 1) ? true : undefined
+            isCached: (isCached && sym.declarations!.length === 1) ? true : undefined,
+            kind: DeclarationTypes.ENUM
         });
         return ref;
     }
@@ -447,7 +450,8 @@ export class Project {
             loc: this.getLOC(currentModule, decl),
             jsDoc: this.getJSDocData(decl),
             id,
-            isCached
+            isCached,
+            kind: DeclarationTypes.TYPE_ALIAS
         });
         return ref;
     }
@@ -507,7 +511,8 @@ export class Project {
             content: text && (text.length > maxLen) ? `${text.slice(0, maxLen)}...` : text,
             type,
             id,
-            isCached
+            isCached,
+            kind: DeclarationTypes.CONSTANT
         });
         return ref;
     }
@@ -542,7 +547,8 @@ export class Project {
             loc: this.getLOC(currentModule, lastDecl),
             isGenerator: Boolean(lastDecl.asteriskToken),
             id,
-            isCached
+            isCached,
+            kind: DeclarationTypes.FUNCTION
         });
         return ref;
     }
@@ -850,19 +856,19 @@ export class Project {
         case ts.SyntaxKind.UndefinedKeyword: return { kind: TypeKinds.UNDEFINED };
         default: {
             if (tryType) {
-            const type = this.extractor.checker.getTypeAtLocation(exp);
-            if (!type) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
-            if (type.symbol) {
-                const aliased = this.resolveAliasedSymbol(type.symbol);
-                if (this.extractor.refs.has(aliased)) return {
-                    kind: TypeKinds.REFERENCE,
-                    type: this.extractor.refs.get(aliased)!,
-                    typeArguments: this.extractor.checker.getTypeArguments(type as ts.TypeReference)?.map(arg => this.resolveTypeType(arg))
-                };
-            }
-            const res = this.resolveTypeType(type);
-            if (res.kind === TypeKinds.UNKNOWN || (res as Reference).type?.kind === TypeReferenceKinds.UNKNOWN) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
-            return res;
+                const type = this.extractor.checker.getTypeAtLocation(exp);
+                if (!type) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
+                if (type.symbol) {
+                    const aliased = this.resolveAliasedSymbol(type.symbol);
+                    if (this.extractor.refs.has(aliased)) return {
+                        kind: TypeKinds.REFERENCE,
+                        type: this.extractor.refs.get(aliased)!,
+                        typeArguments: this.extractor.checker.getTypeArguments(type as ts.TypeReference)?.map(arg => this.resolveTypeType(arg))
+                    };
+                }
+                const res = this.resolveTypeType(type);
+                if (res.kind === TypeKinds.UNKNOWN || (res as Reference).type?.kind === TypeReferenceKinds.UNKNOWN) return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
+                return res;
             }
             return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: exp.getText() };
         }

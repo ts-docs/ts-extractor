@@ -18,7 +18,7 @@ Check out the documentation [here](https://ts-docs.github.io/ts-docs/m.extractor
 
 ## Install
 
-```npm i @ts-docs/extractor```
+`npm i @ts-docs/extractor`
 
 ## Examples
 
