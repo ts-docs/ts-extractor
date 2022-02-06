@@ -307,7 +307,7 @@ export class Project {
             typeParameters: decl.typeParameters?.map(p => this.resolveTypeParameters(p)),
             properties,
             methods: [...methods.values()],
-            loc: this.getLOC(currentModule, decl),
+            loc: this.getLOC(currentModule, decl, true),
             jsDoc: this.getJSDocData(decl),
             isAbstract: decl.modifiers && decl.modifiers.some(m => m.kind === ts.SyntaxKind.AbstractKeyword),
             _constructor: constructor,
@@ -346,7 +346,7 @@ export class Project {
                 if (this.isInternalNode(member)) continue;
                 properties.push(this.resolveObjectProperty(member));
             }
-            loc.push(this.getLOC(currentModule, decl));
+            loc.push(this.getLOC(currentModule, decl, true));
             const jsdoc = this.getJSDocData(decl);
             if (jsdoc) jsDoc.push(...jsdoc);
         }
@@ -410,7 +410,7 @@ export class Project {
                     });
                 }
             }
-            loc.push(this.getLOC(currentModule, decl));
+            loc.push(this.getLOC(currentModule, decl, true));
             const jsDocData = this.getJSDocData(decl);
             if (jsDocData) jsDoc.push(...jsDocData);
         }
@@ -447,7 +447,7 @@ export class Project {
             name: sym.name,
             value: this.resolveType(decl.type),
             typeParameters: decl.typeParameters?.map(param => this.resolveTypeParameters(param)),
-            loc: this.getLOC(currentModule, decl),
+            loc: this.getLOC(currentModule, decl, true),
             jsDoc: this.getJSDocData(decl),
             id,
             isCached,
@@ -506,7 +506,7 @@ export class Project {
         if (currentModule.constants.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
         currentModule.constants.push({
             name: decl.name.getText(),
-            loc: this.getLOC(currentModule, decl),
+            loc: this.getLOC(currentModule, decl, true),
             jsDoc: this.getJSDocData(decl),
             content: text && (text.length > maxLen) ? `${text.slice(0, maxLen)}...` : text,
             type,
@@ -544,7 +544,7 @@ export class Project {
         currentModule.functions.push({
             name: sym.name,
             signatures,
-            loc: this.getLOC(currentModule, lastDecl),
+            loc: this.getLOC(currentModule, lastDecl, true),
             isGenerator: Boolean(lastDecl.asteriskToken),
             id,
             isCached,
@@ -996,13 +996,16 @@ export class Project {
         return res;
     }
 
-    getLOC(currentModule: Module, node: ts.Node, sourceFile = node.getSourceFile(), includeLine = true): Loc {
+    getLOC(currentModule: Module, node: ts.Node, includeFilename?: boolean): Loc {
+        const sourceFile = node.getSourceFile();
         const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
         if (!currentModule.repository) return { pos };
         if (currentModule.isNamespace) return { pos, sourceFile: `${currentModule.repository.slice(0, currentModule.repository.indexOf("#"))}#L${pos.line + 1}` };
+        const filename = getLastItemFromPath(sourceFile.fileName);
         return {
             pos,
-            sourceFile: currentModule.repository && `${currentModule.repository}/${getLastItemFromPath(sourceFile.fileName)}${includeLine ? `#L${pos.line + 1}` : ""}`
+            sourceFile: currentModule.repository && `${currentModule.repository}/${filename}#L${pos.line + 1}`,
+            filename: includeFilename ? filename : undefined
         };
     }
 

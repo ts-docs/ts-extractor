@@ -36,7 +36,8 @@ export interface JSDocData {
 
 export interface Loc {
     pos: ts.LineAndCharacter,
-    sourceFile?: string
+    sourceFile?: string,
+    filename?: string
 }
 
 export interface Node {
