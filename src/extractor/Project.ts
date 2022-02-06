@@ -999,7 +999,7 @@ export class Project {
     getLOC(currentModule: Module, node: ts.Node, includeFilename?: boolean): Loc {
         const sourceFile = node.getSourceFile();
         const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-        if (!currentModule.repository) return { pos };
+        if (!currentModule.repository) return { pos, filename: includeFilename ? getLastItemFromPath(sourceFile.fileName) : undefined };
         if (currentModule.isNamespace) return { pos, sourceFile: `${currentModule.repository.slice(0, currentModule.repository.indexOf("#"))}#L${pos.line + 1}` };
         const filename = getLastItemFromPath(sourceFile.fileName);
         return {
