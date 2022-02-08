@@ -7,7 +7,7 @@ export interface ExternalReference {
     /**
      * The source is undefined only when the thing is not imported, which means it's a global object. (Array, Promise, etc.)
      */
-    run: (symbol: string, source?: string) => {link: string, displayName?: string, name?: string}|undefined,
+    run: (symbol: string, source?: string, other?: string) => {link: string, displayName?: string, name?: string}|undefined,
     /**
      * If this property is provided to the reference manager, it's going to parse the import module name and if the first part of it matches the baseName, the 
      * run function will be called.
@@ -31,9 +31,9 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
         }
     }
 
-    findUnnamedExternal(symbol: string, source?: string) : ReferenceType|undefined {
+    findUnnamedExternal(symbol: string, source?: string, other?: string) : ReferenceType|undefined {
         for (const external of this.unnamedExternals) {
-            const res = external.run(symbol, source);
+            const res = external.run(symbol, source, other);
             if (res) return { name: symbol, kind: TypeReferenceKinds.EXTERNAL, ...res };
         }
         return;
@@ -66,7 +66,7 @@ export class ReferenceManager extends Map<ts.Symbol, ReferenceType> {
                 return res;
             }
         }
-        const unnamed = this.findUnnamedExternal(name, source);
+        const unnamed = this.findUnnamedExternal(name, source, symbol.name);
         if (unnamed && !realName) this.set(symbol, unnamed);
         return unnamed;
     }

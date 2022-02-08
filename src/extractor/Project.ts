@@ -13,16 +13,24 @@ export class Project {
     version?: string
     module: Module
     extractor: TypescriptExtractor
+    /**
+     * The directory right before the 
+     */
     baseDir: string
+    root: string
+    tsconfig?: ts.CompilerOptions
     private ignoreNamespaceMembers?: boolean
     private idAcc: number
-    constructor({ folderPath, extractor, packageJSON }: {
+    constructor({ folderPath, extractor, packageJSON, tsconfig }: {
         folderPath: Array<string>,
         extractor: TypescriptExtractor,
         packageJSON: PackageJSON,
+        tsconfig?: ts.CompilerOptions
     }) {
         folderPath.pop(); // Removes the file name
-        this.baseDir = folderPath[folderPath.length - 1];
+        this.baseDir = folderPath.pop() as string;
+        this.root = folderPath.join("/");
+        this.tsconfig = tsconfig;
         this.repository = getRepository(packageJSON, extractor.settings.branchName);
         this.homepage = packageJSON.contents.homepage;
         this.version = packageJSON.contents.version;

@@ -121,7 +121,7 @@ export class TypescriptExtractor {
         if (typeof this.settings.stripInternal === "undefined") this.settings.stripInternal = tsconfig.stripInternal;
         tsconfig.types = [];
         const packagesMap = new Map<string, string>(); // package name - package path
-        const packageJSONs = new Map<string, PackageJSON>();
+        const packageJSONs = new Map<string, [PackageJSON, ts.CompilerOptions|undefined]>();
         const host = createHost(tsconfig, packagesMap, this.settings, cwd);
 
         for (let i=0; i < this.settings.entryPoints.length; i++) {
@@ -133,7 +133,8 @@ export class TypescriptExtractor {
             if (!packageJSON) throw new Error("Couldn't find package.json file for one of the entry points");
             if (!packageJSON.contents.name) throw new Error("One of the entry points' package.json is missing a name");
             packagesMap.set(packageJSON.contents.name, entryPoint);
-            packageJSONs.set(entryPoint, packageJSON);
+            const tsconfig = ts.findConfigFile(entryPoint, (file) => fs.existsSync(file), "tsconfig.json");
+            packageJSONs.set(entryPoint, [packageJSON, tsconfig ? ts.parseConfigFileTextToJson("package.json", fs.readFileSync(tsconfig, "utf-8")).config.compilerOptions : undefined]);
             this.settings.entryPoints[i] = entryPoint;
         }
 
@@ -144,7 +145,8 @@ export class TypescriptExtractor {
         for (const entryPoint of this.settings.entryPoints) {
             const sourceFile = this.program.getSourceFile(entryPoint);
             if (!sourceFile) continue;
-            const project = new Project({ folderPath: removePartOfEndOfPath(sourceFile.fileName, this.splitCwd), extractor: this, packageJSON: packageJSONs.get(entryPoint)! });
+            const [packageJSON, tsconfig] = packageJSONs.get(entryPoint)!;
+            const project = new Project({ folderPath: removePartOfEndOfPath(sourceFile.fileName, this.splitCwd), extractor: this, packageJSON, tsconfig });
             projects.push(project);
             project.visitor(sourceFile, project.module);
         }
