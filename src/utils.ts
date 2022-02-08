@@ -28,7 +28,7 @@ export interface PackageJSON {
 
 export function findPackageJSON(basePath: string) : PackageJSON|undefined {
     const pathToJson = path.join(basePath, "package.json");
-    if (fs.existsSync(pathToJson)) return { contents: JSON.parse(fs.readFileSync(pathToJson, "utf-8")), path: basePath};
+    if (fs.existsSync(pathToJson)) return { contents: JSON.parse(fs.readFileSync(pathToJson, "utf-8")), path: basePath };
     const newPath = path.join(basePath, "../");
     if (newPath === basePath) return undefined;
     return findPackageJSON(newPath);

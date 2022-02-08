@@ -133,7 +133,7 @@ export class TypescriptExtractor {
             if (!packageJSON) throw new Error("Couldn't find package.json file for one of the entry points");
             if (!packageJSON.contents.name) throw new Error("One of the entry points' package.json is missing a name");
             packagesMap.set(packageJSON.contents.name, entryPoint);
-            const tsconfig = ts.findConfigFile(entryPoint, (file) => fs.existsSync(file), "tsconfig.json");
+            const tsconfig = ts.findConfigFile(packageJSON.path, (file) => fs.existsSync(file), "tsconfig.json");
             packageJSONs.set(entryPoint, [packageJSON, tsconfig ? ts.parseConfigFileTextToJson("package.json", fs.readFileSync(tsconfig, "utf-8")).config.compilerOptions : undefined]);
             this.settings.entryPoints[i] = entryPoint;
         }

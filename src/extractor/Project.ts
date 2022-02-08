@@ -28,8 +28,8 @@ export class Project {
         tsconfig?: ts.CompilerOptions
     }) {
         folderPath.pop(); // Removes the file name
-        this.baseDir = folderPath.pop() as string;
-        this.root = folderPath.join("/");
+        this.baseDir = folderPath[folderPath.length - 1];
+        this.root = packageJSON.path;
         this.tsconfig = tsconfig;
         this.repository = getRepository(packageJSON, extractor.settings.branchName);
         this.homepage = packageJSON.contents.homepage;
