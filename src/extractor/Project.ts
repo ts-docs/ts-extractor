@@ -136,14 +136,16 @@ export class Project {
 
     handleSymbol(val: ts.Symbol, currentModule?: Module, isCached?: boolean): ReferenceType | undefined {
         if (!val.declarations || !val.declarations.length) return;
-        if (this.extractor.refs.has(val)) return this.extractor.refs.get(val);
         if (!currentModule) {
             const origin = val.declarations[0].getSourceFile();
             if (this.extractor.program.isSourceFileFromExternalLibrary(origin) || this.extractor.program.isSourceFileDefaultLibrary(origin)) return;
             const fileName = origin.fileName;
             currentModule = this.getOrCreateModule(fileName);
+            this.visitor(origin, currentModule);
             isCached = this.extractor.fileCache.has(fileName) ? this.extractor.fileCache.get(fileName) : this.extractor.settings.fileCache?.has(fileName);
         }
+
+        if (this.extractor.refs.has(val)) return this.extractor.refs.get(val);
 
         if (!this.ignoreNamespaceMembers && ts.isModuleBlock(val.declarations[0].parent)) {
             const namespaceSym = this.extractor.checker.getSymbolAtLocation(val.declarations[0].parent.parent.name);
