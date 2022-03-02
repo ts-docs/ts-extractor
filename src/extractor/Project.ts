@@ -13,9 +13,6 @@ export class Project {
     version?: string
     module: Module
     extractor: TypescriptExtractor
-    /**
-     * The directory right before the 
-     */
     baseDir: string
     root: string
     tsconfig?: ts.CompilerOptions
@@ -513,6 +510,7 @@ export class Project {
         if (ts.isBindingElement(decl)) {
             type = this.resolveTypeType(this.extractor.checker.getTypeAtLocation(decl));
             name = decl.name.getText();
+            comment = this.getJSDocDataRaw(decl);
         } else if (ts.isVariableDeclaration(decl)) {
             const maxLen = this.extractor.settings.maxConstantTextLength || 256;
             type = decl.type && this.resolveType(decl.type);
@@ -1013,6 +1011,23 @@ export class Project {
         //@ts-expect-error Internal access - Why is this internal?
         const jsDoc = node.jsDoc as Array<ts.JSDoc>;
         if (!jsDoc || !jsDoc.length) return undefined;
+        return this.jsDocToJsDocData(jsDoc);
+    }
+
+    getJSDocDataRaw(node: ts.Node) : Array<JSDocData> | undefined {
+        const fullText = node.getSourceFile().text;
+        const ranges = ts.getLeadingCommentRanges(fullText, node.getFullStart());
+        if (!ranges) return;
+        const jsDoc = [];
+        for (const range of ranges) {
+            const text = fullText.slice(range.pos, range.end);
+            //@ts-expect-error Internal API
+            jsDoc.push(ts.parseIsolatedJSDocComment(text).jsDoc);
+        }
+        return this.jsDocToJsDocData(jsDoc);
+    }
+
+    jsDocToJsDocData(jsDoc: Array<ts.JSDoc>) : Array<JSDocData> {
         const res: Array<JSDocData> = [];
         for (const currentDoc of jsDoc) {
             let tags: Array<JSDocTag> | undefined = undefined;
@@ -1036,7 +1051,7 @@ export class Project {
         const sourceFile = node.getSourceFile();
         const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
         if (!currentModule.repository) return { pos, filename: includeFilename ? getLastItemFromPath(sourceFile.fileName) : undefined };
-        if (currentModule.isNamespace) return { pos, sourceFile: `${currentModule.repository.slice(0, currentModule.repository.indexOf("#"))}#L${pos.line + 1}` };
+        if (currentModule.isNamespace) return { pos, sourceFile: `${currentModule.repository.slice(0, currentModule.repository.indexOf("#"))}#L${pos.line + 1}`, filename: includeFilename ? getLastItemFromPath(sourceFile.fileName) : undefined };
         const filename = getLastItemFromPath(sourceFile.fileName);
         return {
             pos,

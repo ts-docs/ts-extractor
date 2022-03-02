@@ -152,6 +152,18 @@ export const enum DeclarationTypes {
     TYPE_ALIAS
 }
 
+export function createRefFromDecl(decl: Declaration, module: Module) : Reference {
+    return {
+        kind: TypeKinds.REFERENCE,
+        type: {
+            name: decl.name,
+            kind: decl.kind as unknown as TypeReferenceKinds,
+            path: module.path,
+            id: decl.id
+        }
+    };
+}
+
 export interface ReferenceType {
     name: string,
     /**
