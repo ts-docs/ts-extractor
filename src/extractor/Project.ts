@@ -494,7 +494,7 @@ export class Project {
     }
 
     handleVariableDecl(sym: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
-        const decl = sym.declarations!.find(decl => ts.isVariableDeclaration(decl)) as ts.VariableDeclaration;
+        const decl = sym.declarations!.find(decl => ts.isVariableDeclaration(decl) || ts.isBindingElement(decl)) as ts.Declaration;
         const ref: ReferenceType = {
             name: sym.name,
             kind: TypeReferenceKinds.CONSTANT,
@@ -505,20 +505,46 @@ export class Project {
             ref.kind = TypeReferenceKinds.INTERNAL;
             return ref;
         }
-        const maxLen = this.extractor.settings.maxConstantTextLength || 256;
-        let text;
-        let type = decl.type && this.resolveType(decl.type);
-        if (decl.initializer) {
-            text = decl.initializer.getText();
-            if (!type && ts.isArrowFunction(decl.initializer)) type = this.resolveTypeType(this.extractor.checker.getTypeAtLocation(decl.initializer));
-        }
+        let name = "";
+        let type: Type|undefined;
+        let comment;
+        let text = "";
         let id;
-        if (currentModule.constants.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
-        currentModule.constants.push({
-            name: decl.name.getText(),
+        if (ts.isBindingElement(decl)) {
+            type = this.resolveTypeType(this.extractor.checker.getTypeAtLocation(decl));
+            name = decl.name.getText();
+        } else if (ts.isVariableDeclaration(decl)) {
+            const maxLen = this.extractor.settings.maxConstantTextLength || 256;
+            type = decl.type && this.resolveType(decl.type);
+            if (decl.initializer) {
+                const initializerText = decl.initializer.getText();
+                text = initializerText && (initializerText.length > maxLen) ? `${initializerText.slice(0, maxLen)}...` : initializerText;
+                if (!type) type = this.resolveTypeType(this.extractor.checker.getTypeAtLocation(decl.initializer));
+            }
+            if (currentModule.constants.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
+            name = decl.name.getText();
+            comment = this.getJSDocData(decl.parent.parent);
+        }
+        const realType = type as Type;
+        if (realType.kind === TypeKinds.ARROW_FUNCTION) {
+            ref.kind = TypeReferenceKinds.FUNCTION;
+            currentModule.functions.push({
+                name,
+                loc: this.getLOC(currentModule, decl, true),
+                signatures: [{
+                    parameters: realType.parameters,
+                    returnType: realType.returnType,
+                    typeParameters: realType.typeParameters,
+                    jsDoc: comment
+                }],
+                kind: DeclarationTypes.FUNCTION
+            });
+        }
+        else currentModule.constants.push({
+            name,
             loc: this.getLOC(currentModule, decl, true),
-            jsDoc: this.getJSDocData(decl),
-            content: text && (text.length > maxLen) ? `${text.slice(0, maxLen)}...` : text,
+            jsDoc: comment,
+            content: text,
             type,
             id,
             isCached,
@@ -653,7 +679,7 @@ export class Project {
             };
         }
         else if (ts.isTypeOperatorNode(type)) {
-            let kind;
+            let kind: TypeKinds;
             switch (type.operator) {
             case ts.SyntaxKind.UniqueKeyword:
                 kind = TypeKinds.UNIQUE_OPERATOR;

@@ -177,16 +177,23 @@ export interface BaseType {
 
 export interface Reference extends BaseType {
     type: ReferenceType,
-    typeArguments?: Array<Type>
+    typeArguments?: Array<Type>,
+    kind: TypeKinds.REFERENCE
 }
 
-export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType | TypePredicateType | InferType | ConstructorType;
+export type Type = Reference | Literal | ArrowFunction | ObjectLiteral | UnionOrIntersection | TypeOperator | Tuple | ArrayType | MappedType | ConditionalType | TemplateLiteralType | IndexAccessedType | TypePredicateType | InferType | ConstructorType | StringifiedUnknown;
+
+export interface StringifiedUnknown extends BaseType {
+    name: string,
+    kind: TypeKinds.STRINGIFIED_UNKNOWN
+}
 
 /**
  * `string`, `number`, `boolean`, etc.
  */
 export interface Literal extends BaseType {
-    name: string
+    name: string,
+    kind: TypeKinds.NUMBER_LITERAL | TypeKinds.STRING_LITERAL | TypeKinds.BOOLEAN | TypeKinds.REGEX_LITERAL
 }
 
 export interface TypeParameter {
@@ -274,7 +281,8 @@ export type ConstructorType = FunctionSignature & BaseType;
 export interface ArrowFunction extends BaseType {
     typeParameters?: Array<TypeParameter>,
     returnType?: Type,
-    parameters?: Array<FunctionParameter>
+    parameters?: Array<FunctionParameter>,
+    kind: TypeKinds.ARROW_FUNCTION
 }
 
 /**
@@ -293,13 +301,15 @@ export interface IndexSignatureDeclaration {
  */
 export interface ObjectLiteral extends BaseType {
     properties: Array<ObjectProperty>,
+    kind: TypeKinds.OBJECT_LITERAL
 }
 
 /**
  * `a | b` or `a & b`
  */
 export interface UnionOrIntersection extends BaseType {
-    types: Array<Type>
+    types: Array<Type>,
+    kind: TypeKinds.UNION | TypeKinds.INTERSECTION
 }
 
 /**
@@ -311,7 +321,8 @@ export interface UnionOrIntersection extends BaseType {
  * ```
  */
 export interface TypeOperator extends BaseType {
-    type: Type
+    type: Type,
+    kind: TypeKinds.TYPEOF_OPERATOR | TypeKinds.UNIQUE_OPERATOR | TypeKinds.READONLY_OPERATOR | TypeKinds.KEYOF_OPERATOR
 }
 
 export interface TupleMember {
@@ -326,13 +337,15 @@ export interface TupleMember {
  */
 export interface Tuple extends BaseType {
     types: Array<TupleMember>,
+    kind: TypeKinds.TUPLE
 }
 
 /**
  * `a[]`
  */
 export interface ArrayType extends BaseType {
-    type: Type
+    type: Type,
+    kind: TypeKinds.ARRAY_TYPE
 }
 
 export interface ObjectProperty {
@@ -408,7 +421,8 @@ export interface MappedType extends BaseType {
     typeParameter: string,
     constraint?: Type,
     optional?: boolean,
-    type?: Type
+    type?: Type,
+    kind: TypeKinds.MAPPED_TYPE
 }
 
 /**
@@ -420,7 +434,8 @@ export interface ConditionalType extends BaseType {
     checkType: Type,
     extendsType: Type,
     trueType: Type,
-    falseType: Type
+    falseType: Type,
+    kind: TypeKinds.CONDITIONAL_TYPE
 }
 
 /**
@@ -431,7 +446,8 @@ export interface ConditionalType extends BaseType {
  */
 export interface TemplateLiteralType extends BaseType {
     head: string,
-    spans: Array<{type: Type, text: string}>
+    spans: Array<{type: Type, text: string}>,
+    kind: TypeKinds.TEMPLATE_LITERAL
 }
 
 /**
@@ -442,7 +458,8 @@ export interface TemplateLiteralType extends BaseType {
  */
 export interface IndexAccessedType extends BaseType {
     object: Type,
-    index: Type
+    index: Type,
+    kind: TypeKinds.INDEX_ACCESS
 }
 
 /**
@@ -450,11 +467,13 @@ export interface IndexAccessedType extends BaseType {
  */
 export interface TypePredicateType extends BaseType {
     parameter: Type|string, 
-    type: Type
+    type: Type,
+    kind: TypeKinds.TYPE_PREDICATE
 }
 
 export interface InferType extends BaseType {
-    typeParameter: Reference
+    typeParameter: Reference,
+    kind: TypeKinds.INFER_TYPE
 }
 
 export type Declaration = ClassDecl | InterfaceDecl | EnumDecl | FunctionDecl | TypeDecl | ConstantDecl;
