@@ -810,7 +810,7 @@ export class Project {
                     isOptional: Boolean(prop.questionToken),
                     isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword)
                 },
-                jsDoc: this.getJSDocData(prop)
+                jsDoc: this.getJSDocDataRaw(prop)
             };
         }
         else if (ts.isMethodSignature(prop)) {
@@ -827,7 +827,7 @@ export class Project {
                     },
                     isOptional: Boolean(prop.questionToken),
                 },
-                jsDoc: this.getJSDocData(prop)
+                jsDoc: this.getJSDocDataRaw(prop)
             };
         }
         else if (ts.isCallSignatureDeclaration(prop)) return {
@@ -836,7 +836,7 @@ export class Project {
                 typeParameters: prop.typeParameters?.map(param => this.resolveTypeParameters(param)),
                 returnType: prop.type && this.resolveType(prop.type),
             },
-            jsDoc: this.getJSDocData(prop)
+            jsDoc: this.getJSDocDataRaw(prop)
         };
         else if (ts.isConstructSignatureDeclaration(prop)) return {
             construct: {
@@ -844,7 +844,7 @@ export class Project {
                 typeParameters: prop.typeParameters?.map(param => this.resolveTypeParameters(param)),
                 returnType: prop.type && this.resolveType(prop.type),
             },
-            jsDoc: this.getJSDocData(prop)
+            jsDoc: this.getJSDocDataRaw(prop)
         };
         else {
             const param = (prop as ts.IndexSignatureDeclaration).parameters[0];
@@ -854,7 +854,7 @@ export class Project {
                     type: this.resolveType((prop as ts.IndexSignatureDeclaration).type),
                     isReadonly: prop.modifiers?.some(mod => mod.kind === ts.SyntaxKind.ReadonlyKeyword)
                 },
-                jsDoc: this.getJSDocData(prop)
+                jsDoc: this.getJSDocDataRaw(prop)
             };
         }
     }
@@ -938,7 +938,8 @@ export class Project {
                         name: property.name,
                         rawName: property.name,
                         type: this.resolveTypeType(this.extractor.checker.getTypeOfSymbolAtLocation(property, property.valueDeclaration!))
-                    }
+                    },
+                    jsDoc: property.declarations?.length ? this.getJSDocDataRaw(property.declarations[0]) : undefined 
                 });
             }
             if (type.getNumberIndexType()) {
@@ -1015,6 +1016,8 @@ export class Project {
     }
 
     getJSDocDataRaw(node: ts.Node) : Array<JSDocData> | undefined {
+        //@ts-expect-error Internal access - Why is this internal?
+        if (node.jsDoc) return this.getJSDocData(node);
         const fullText = node.getSourceFile().text;
         const ranges = ts.getLeadingCommentRanges(fullText, node.getFullStart());
         if (!ranges) return;
