@@ -152,14 +152,15 @@ export const enum DeclarationTypes {
     TYPE_ALIAS
 }
 
-export function createRefFromDecl(decl: Declaration, module: Module) : Reference {
+export function createRefFromDecl(decl: Declaration|Module, module: Module) : Reference {
     return {
         kind: TypeKinds.REFERENCE,
         type: {
             name: decl.name,
-            kind: decl.kind as unknown as TypeReferenceKinds,
+            kind: ((decl as unknown as Record<string, unknown>).kind as TypeReferenceKinds) ?? TypeReferenceKinds.NAMESPACE_OR_MODULE,
             path: module.path,
-            id: decl.id
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            id: (decl as any).id
         }
     };
 }

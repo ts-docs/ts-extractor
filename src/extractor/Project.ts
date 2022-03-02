@@ -1025,7 +1025,8 @@ export class Project {
         for (const range of ranges) {
             const text = fullText.slice(range.pos, range.end);
             //@ts-expect-error Internal API
-            jsDoc.push(ts.parseIsolatedJSDocComment(text).jsDoc);
+            const parsed = ts.parseIsolatedJSDocComment(text);
+            if (parsed && parsed.jsDoc) jsDoc.push(parsed);
         }
         return this.jsDocToJsDocData(jsDoc);
     }
