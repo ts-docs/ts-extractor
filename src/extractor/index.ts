@@ -158,3 +158,4 @@ export * from "./Host";
 export * from "./Project";
 export * from "./ReferenceManager";
 export * from "./structure";
+export * as ExtractorUtils from "./utils";

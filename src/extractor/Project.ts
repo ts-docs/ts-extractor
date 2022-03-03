@@ -5,6 +5,7 @@ import { DeclarationTypes, ObjectProperty, TypescriptExtractor } from ".";
 import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON, } from "../utils";
 import { registerDirectExport, registerDirectReExport, registerNamespaceReExport, registerOtherExportOrReExport } from "./ExportHandler";
 import { ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, FunctionParameter, JSDocData, JSDocTag, Loc, Module, ObjectLiteral, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
+import { forEachModule } from "./utils";
 
 export class Project {
     repository?: string
@@ -121,14 +122,8 @@ export class Project {
         return lastModule;
     }
 
-    forEachModule<R>(module = this.module, cb: (module: Module, path: Array<string>) => R | undefined, pathToMod: Array<string> = []): R | undefined {
-        const firstCb = cb(module, pathToMod);
-        if (firstCb) return firstCb;
-        for (const [, mod] of module.modules) {
-            const res = this.forEachModule(mod, cb, [...pathToMod, mod.name]);
-            if (res) return res;
-        }
-        return undefined;
+    forEachModule<R>(cb: (module: Module) => R | undefined, module = this.module): R | undefined {
+        return forEachModule<R>(module, cb);
     }
 
     handleSymbol(val: ts.Symbol, currentModule?: Module, isCached?: boolean): ReferenceType | undefined {
