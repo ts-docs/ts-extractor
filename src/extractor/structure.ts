@@ -342,7 +342,8 @@ export interface TupleMember {
     type: Type,
     spread?: boolean,
     name?: string,
-    optional?: boolean
+    optional?: boolean,
+    jsDoc?: Array<JSDocData>
 }
 
 /**

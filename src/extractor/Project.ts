@@ -655,10 +655,11 @@ export class Project {
         else if (ts.isTupleTypeNode(type)) {
             return {
                 types: type.elements.map(el => {
-                    if (ts.isNamedTupleMember(el)) return { type: this.resolveType(el.type), name: el.name.text, spread: Boolean(el.dotDotDotToken), optional: Boolean(el.questionToken) };
-                    else if (ts.isRestTypeNode(el)) return { type: this.resolveType(el.type), spread: true };
-                    else if (ts.isOptionalTypeNode(el)) return { type: this.resolveType(el.type), optional: true };
-                    return { type: this.resolveType(el) };
+                    const jsDoc = this.getJSDocDataRaw(el);
+                    if (ts.isNamedTupleMember(el)) return { type: this.resolveType(el.type), name: el.name.text, spread: Boolean(el.dotDotDotToken), optional: Boolean(el.questionToken), jsDoc };
+                    else if (ts.isRestTypeNode(el)) return { type: this.resolveType(el.type), spread: true, jsDoc };
+                    else if (ts.isOptionalTypeNode(el)) return { type: this.resolveType(el.type), optional: true, jsDoc };
+                    return { type: this.resolveType(el), jsDoc };
                 }),
                 kind: TypeKinds.TUPLE
             };
