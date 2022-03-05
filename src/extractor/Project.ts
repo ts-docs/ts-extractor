@@ -908,7 +908,11 @@ export class Project {
     resolveTypeType(type: ts.Type): Type {
         if (type.isStringLiteral()) return { kind: TypeKinds.STRING_LITERAL, name: type.value };
         else if (type.isNumberLiteral()) return { kind: TypeKinds.NUMBER_LITERAL, name: type.value.toString() };
-        else if (type.isUnion()) return { kind: TypeKinds.UNION, types: type.types.map(v => this.resolveTypeType(v)) };
+        else if (type.isUnion()) {
+            const types = type.types.map(v => this.resolveTypeType(v));
+            if (types[0].kind === TypeKinds.FALSE && types[1].kind === TypeKinds.TRUE) return { kind: TypeKinds.BOOLEAN };
+            return { kind: TypeKinds.UNION, types };
+        }
         else if (type.isIntersection()) return { kind: TypeKinds.INTERSECTION, types: type.types.map(v => this.resolveTypeType(v)) };
         else if (hasBit(type.flags, ts.TypeFlags.Unknown)) return { kind: TypeKinds.UNKNOWN };
         else if (hasBit(type.flags, ts.TypeFlags.String)) return { kind: TypeKinds.STRING };
@@ -980,6 +984,7 @@ export class Project {
         const typeStr = this.extractor.checker.typeToString(type);
         if (typeStr === "true") return { kind: TypeKinds.TRUE };
         else if (typeStr === "false") return { kind: TypeKinds.FALSE };
+        else if (typeStr === "object") return { kind: TypeKinds.OBJECT };
         const sym = (type as ts.Type).getSymbol();
         if (sym) return this.resolveSymbol(sym, this.extractor.checker.getTypeArguments(type as unknown as ts.TypeReference).map(t => this.resolveTypeType(t)));
         return { kind: TypeKinds.STRINGIFIED_UNKNOWN, name: typeStr };
