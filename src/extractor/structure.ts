@@ -30,7 +30,7 @@ export interface JSDocTag {
 }
 
 export interface JSDocData {
-    tags?: Array<JSDocTag>,
+    tags: Array<JSDocTag>,
     comment?: string
 }
 

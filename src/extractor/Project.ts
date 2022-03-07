@@ -512,7 +512,7 @@ export class Project {
             if (decl.initializer) {
                 const initializerText = decl.initializer.getText();
                 text = initializerText && (initializerText.length > maxLen) ? `${initializerText.slice(0, maxLen)}...` : initializerText;
-                if (!type) type = this.resolveTypeType(this.extractor.checker.getTypeAtLocation(decl.initializer));
+                if (!type) type = this.resolveExpressionToType(decl.initializer);
             }
             if (currentModule.constants.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
             name = decl.name.getText();
@@ -527,9 +527,9 @@ export class Project {
                 signatures: [{
                     parameters: realType.parameters,
                     returnType: realType.returnType,
-                    typeParameters: realType.typeParameters,
-                    jsDoc: comment
+                    typeParameters: realType.typeParameters
                 }],
+                jsDoc: comment,
                 kind: DeclarationTypes.FUNCTION
             });
         }
@@ -867,7 +867,7 @@ export class Project {
             rest: Boolean(param.dotDotDotToken),
             type: param.type && this.resolveType(param.type),
             defaultValue: param.initializer && this.resolveExpressionToType(param.initializer),
-            jsDoc: { comment: this.getJSDocCommentOfParam(param) }
+            jsDoc: { comment: this.getJSDocCommentOfParam(param), tags: [] }
         };
     }
 
@@ -884,6 +884,18 @@ export class Project {
         case ts.SyntaxKind.NullKeyword: return { kind: TypeKinds.NULL };
         case ts.SyntaxKind.RegularExpressionLiteral: return { name: exp.getText(), kind: TypeKinds.REGEX_LITERAL };
         case ts.SyntaxKind.UndefinedKeyword: return { kind: TypeKinds.UNDEFINED };
+        case ts.SyntaxKind.ArrowFunction: return {
+            kind: TypeKinds.ARROW_FUNCTION,
+            parameters: (exp as ts.ArrowFunction).parameters.map(p => ({
+                name: ts.isIdentifier(p.name) ? p.name.text : "__namedParameters",
+                rest: Boolean(p.dotDotDotToken),
+                isOptional: Boolean(p.questionToken),
+                defaultValue: p.initializer && this.resolveExpressionToType(p.initializer),
+                type: p.type && this.resolveType(p.type)
+            })),
+            returnType: this.resolveReturnType(exp as ts.ArrowFunction),
+            typeParameters: (exp as ts.ArrowFunction).typeParameters && (exp as ts.ArrowFunction).typeParameters!.map(t => this.resolveTypeParameters(t))
+        };
         default: {
             if (tryType) {
                 const type = this.extractor.checker.getTypeAtLocation(exp);
@@ -1019,6 +1031,7 @@ export class Project {
     getJSDocDataRaw(node: ts.Node) : Array<JSDocData> | undefined {
         //@ts-expect-error Internal access - Why is this internal?
         if (node.jsDoc) return this.getJSDocData(node);
+        if (node.pos === -1) return;
         const fullText = node.getSourceFile().text;
         const ranges = ts.getLeadingCommentRanges(fullText, node.getFullStart());
         if (!ranges) return;
@@ -1035,9 +1048,8 @@ export class Project {
     jsDocToJsDocData(jsDoc: Array<ts.JSDoc>) : Array<JSDocData> {
         const res: Array<JSDocData> = [];
         for (const currentDoc of jsDoc) {
-            let tags: Array<JSDocTag> | undefined = undefined;
+            const tags: Array<JSDocTag> = [];
             if (currentDoc.tags) {
-                tags = [];
                 for (const tag of currentDoc.tags) {
                     tags.push({
                         name: tag.tagName.text,
