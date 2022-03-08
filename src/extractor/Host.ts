@@ -55,6 +55,12 @@ export function createHost(options: ts.CompilerOptions, customModules: Map<strin
     return defaultHost;
 }
 
+/**
+ * Known issues with the watch host:
+ * - Includes all items in the edited file, not just the modified ones. I feel like it's cheaper to do it like this and not compare objects.
+ * - Always adds new symbols to the [[TypescriptExtractor.refs]] cache. This can become problematic if there are a lot of symbols inside of 
+ * the file that got changed. 
+ */
 export function createWatchHost(extractor: TypescriptExtractor, watch: WatchFn, options: ts.CompilerOptions, customModules: Map<string, string>, extractorOptions: TypescriptExtractorSettings, cwd: string) : WatchHost {
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     const host = ts.createWatchCompilerHost(extractorOptions.entryPoints, options, ts.sys, ts.createSemanticDiagnosticsBuilderProgram, () => {}, () => {});
@@ -65,6 +71,7 @@ export function createWatchHost(extractor: TypescriptExtractor, watch: WatchFn, 
         const prog = program.getProgram();
         extractor.program = prog;
         extractor.checker = prog.getTypeChecker();
+        const start = Date.now();
         for (const source of program.getSourceFiles()) {
             //@ts-expect-error Internal
             const fileVersion = source.version;
@@ -101,7 +108,7 @@ export function createWatchHost(extractor: TypescriptExtractor, watch: WatchFn, 
                 const ref = project.handleSymbol(val, module, false);
                 if (ref && ref.path === module.path) refs.push(ref);
             }
-            watch(refs, module, project);
+            watch(refs, module, project, start);
         }
     };
     extendHost(host, options, customModules, extractorOptions, cwd);

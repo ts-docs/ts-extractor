@@ -24,8 +24,9 @@ export abstract class FileObjectCache {
  * @param refs - All references of items which are inside of the file.
  * @param module - The module which owns the file.
  * @param project - The project which owns the module.
+ * @param time - When the recompilation started.
  */
-export type WatchFn = (refs: Array<ReferenceType>, module: Module, project: Project) => void;
+export type WatchFn = (refs: Array<ReferenceType>, module: Module, project: Project, time: number) => void;
 
 export interface TypescriptExtractorSettings {
     /**
