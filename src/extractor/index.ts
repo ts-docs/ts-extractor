@@ -4,10 +4,10 @@ import fs from "fs";
 import path from "path";
 import ts from "typescript";
 import { findPackageJSON, PackageJSON, removePartOfEndOfPath } from "../utils";
-import { createHost } from "./Host";
+import { createHost, createWatchHost, WatchHost } from "./Host";
 import { Project } from "./Project";
 import { ExternalReference, ReferenceManager } from "./ReferenceManager";
-import { Module } from "./structure";
+import { Declaration, Module } from "./structure";
 
 export abstract class FileObjectCache {
     /**
@@ -17,6 +17,11 @@ export abstract class FileObjectCache {
      */
     abstract has(absolute: string) : boolean;
 }
+
+/**
+ * A function which gets called when a item from a module gets updated.
+ */
+export type WatchFn = (decls: Array<Declaration>, module: Module, project: Project) => void;
 
 export interface TypescriptExtractorSettings {
     /**
@@ -68,7 +73,12 @@ export interface TypescriptExtractorSettings {
     /**
      * A custom typescript compiler host.
      */
-    compilerHost?: (tsconfig: ts.CompilerOptions) => ts.CompilerHost
+    compilerHost?: (tsconfig: ts.CompilerOptions) => ts.CompilerHost,
+    /**
+     * If provided, enables incremental compilation. The provided function gets executed every time a file inside any of the
+     * projects changes.
+     */
+    watch?: WatchFn
 }
 
 export class TypescriptExtractor {
@@ -79,11 +89,13 @@ export class TypescriptExtractor {
     moduleCache: Record<string, Module>
     fileCache: Map<string, boolean|undefined>
     splitCwd!: Array<string>
+    projects: Array<Project>
     constructor(settings: TypescriptExtractorSettings) {
         this.settings = settings;
         this.refs = settings.refs || new ReferenceManager(settings.externals);
         this.moduleCache = {};
         this.fileCache = new Map();
+        this.projects = [];
     }
 
     isCachedFile(fileName: string) : boolean|undefined {
@@ -122,7 +134,9 @@ export class TypescriptExtractor {
         tsconfig.types = [];
         const packagesMap = new Map<string, string>(); // package name - package path
         const packageJSONs = new Map<string, [PackageJSON, ts.CompilerOptions|undefined]>();
-        const host = createHost(tsconfig, packagesMap, this.settings, cwd);
+        let host;
+        if (this.settings.watch) host = createWatchHost(this, this.settings.watch, tsconfig, packagesMap, this.settings, cwd);
+        else host = createHost(tsconfig, packagesMap, this.settings, cwd);
 
         for (let i=0; i < this.settings.entryPoints.length; i++) {
             let entryPoint = this.settings.entryPoints[i];
@@ -138,7 +152,11 @@ export class TypescriptExtractor {
             this.settings.entryPoints[i] = entryPoint;
         }
 
-        this.program = ts.createProgram(this.settings.entryPoints, tsconfig, host);
+        if (this.settings.watch) {
+            const watcher = ts.createWatchProgram(host as WatchHost);
+            this.program = watcher.getProgram().getProgram();
+        }
+        else this.program = ts.createProgram(this.settings.entryPoints, tsconfig, host as ts.CompilerHost);
 
         this.checker = this.program.getTypeChecker();
         const projects = [];
@@ -150,6 +168,7 @@ export class TypescriptExtractor {
             projects.push(project);
             project.visitor(sourceFile, project.module);
         }
+        this.projects = projects;
         return projects;
     }
 }

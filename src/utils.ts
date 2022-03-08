@@ -21,6 +21,10 @@ export function getFilenameFromPath(p: string) : string {
     return name.base.slice(0, name.base.indexOf("."));
 }
 
+export function normalPath(p: string) : string {
+    return p.replace(/\\/g, "/");
+}
+
 export interface PackageJSON { 
     contents: Record<string, string>,
     path: string

@@ -4,8 +4,8 @@ import ts from "typescript";
 import { DeclarationTypes, ObjectProperty, TypescriptExtractor } from ".";
 import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON, } from "../utils";
 import { registerDirectExport, registerDirectReExport, registerNamespaceReExport, registerOtherExportOrReExport } from "./ExportHandler";
-import { ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, FunctionParameter, JSDocData, JSDocTag, Loc, Module, ObjectLiteral, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
-import { forEachModule } from "./utils";
+import { ArrowFunction, ClassDecl, ClassMethod, ClassProperty, ConstantDecl, createModule, EnumDecl, FunctionDecl, FunctionParameter, InterfaceDecl, JSDocData, JSDocTag, Loc, Module, ObjectLiteral, Reference, ReferenceType, Type, TypeDecl, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
+import { forEachModule } from "./utils"; 
 
 export class Project {
     repository?: string
@@ -182,6 +182,14 @@ export class Project {
             ref.kind = TypeReferenceKinds.INTERNAL;
             return ref;
         }
+        const classObj = this.createClassDecl(symbol, decl, currentModule, isCached);
+        if (currentModule.classes.some(cl => cl.name === name)) classObj.id = ref.id = this.idAcc++;
+        currentModule.classes.push(classObj);
+        return ref;
+    }
+
+    createClassDecl(sym: ts.Symbol, decl: ts.ClassDeclaration|undefined, currentModule: Module, isCached?: boolean) : ClassDecl {
+        if (!decl) decl = sym.declarations!.find(decl => ts.isClassDeclaration(decl)) as ts.ClassDeclaration;
         const properties: Array<ClassProperty> = [];
         const methods = new Map<string, ClassMethod>();
         let constructor;
@@ -305,7 +313,7 @@ export class Project {
             }
         }
         const classObj: ClassDecl = {
-            name,
+            name: sym.name,
             typeParameters: decl.typeParameters?.map(p => this.resolveTypeParameters(p)),
             properties,
             methods: [...methods.values()],
@@ -322,9 +330,7 @@ export class Project {
             const implementsClauses = decl.heritageClauses?.find(clause => clause.token === ts.SyntaxKind.ImplementsKeyword);
             classObj.implements = implementsClauses && implementsClauses.types.map(clause => this.resolveHeritage(clause));
         }
-        if (currentModule.classes.some(cl => cl.name === name)) classObj.id = ref.id = this.idAcc++;
-        currentModule.classes.push(classObj);
-        return ref;
+        return classObj;
     }
 
     handleInterfaceDecl(sym: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
@@ -339,6 +345,14 @@ export class Project {
             ref.kind = TypeReferenceKinds.INTERNAL;
             return ref;
         }
+        const intf = this.createInterfaceDecl(sym, firstDecl, currentModule, isCached);
+        if (currentModule.interfaces.some(int => int.name === sym.name)) ref.id = intf.id = this.idAcc++;
+        currentModule.interfaces.push(intf);
+        return ref;
+    }
+
+    createInterfaceDecl(sym: ts.Symbol, firstDecl: ts.InterfaceDeclaration|undefined, currentModule: Module, isCached?: boolean) : InterfaceDecl {
+        if (!firstDecl) firstDecl = sym.declarations!.find(decl => ts.isInterfaceDeclaration(decl)) as ts.InterfaceDeclaration;
         const properties = [];
         const loc = [];
         const jsDoc = [];
@@ -359,25 +373,21 @@ export class Project {
             const implementsClause = firstDecl.heritageClauses.find(c => c.token === ts.SyntaxKind.ImplementsKeyword);
             implementsInt = implementsClause && implementsClause.types.map(impl => this.resolveType(impl));
         }
-        let id;
-        if (currentModule.interfaces.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
-        currentModule.interfaces.push({
+        return {
             name: sym.name,
             extends: extendsInt,
             implements: implementsInt,
             loc,
             properties,
             jsDoc,
-            id,
             typeParameters: firstDecl.typeParameters && firstDecl.typeParameters.map(p => this.resolveTypeParameters(p)),
             isCached: (isCached && sym.declarations!.length === 1) ? true : undefined,
             kind: DeclarationTypes.INTERFACE
-        });
-        return ref;
+        };
     }
 
     handleEnumDecl(sym: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
-        const firstDecl = sym.declarations!.find(decl => ts.isEnumDeclaration(decl))!;
+        const firstDecl = sym.declarations!.find(decl => ts.isEnumDeclaration(decl))! as ts.EnumDeclaration;
         const ref: ReferenceType = {
             name: sym.name,
             path: currentModule.path,
@@ -388,6 +398,14 @@ export class Project {
             ref.kind = TypeReferenceKinds.INTERNAL;
             return ref;
         }
+        const enumDecl = this.createEnumDecl(sym, firstDecl, currentModule, isCached);
+        if (currentModule.enums.some(int => int.name === sym.name)) ref.id = enumDecl.id = this.idAcc++;
+        currentModule.enums.push(enumDecl);
+        return ref;
+    }
+
+    createEnumDecl(sym: ts.Symbol, firstDecl: ts.EnumDeclaration|undefined, currentModule: Module, isCached?: boolean) : EnumDecl {
+        if (!firstDecl) firstDecl = sym.declarations!.find(decl => ts.isEnumDeclaration(decl))! as ts.EnumDeclaration;
         const members = [];
         const loc = [];
         const jsDoc = [];
@@ -416,19 +434,15 @@ export class Project {
             const jsDocData = this.getJSDocData(decl);
             if (jsDocData) jsDoc.push(...jsDocData);
         }
-        let id;
-        if (currentModule.enums.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
-        currentModule.enums.push({
+        return {
             name: sym.name,
             isConst: Boolean(firstDecl.modifiers && firstDecl.modifiers.some(mod => mod.kind === ts.SyntaxKind.ConstKeyword)),
             loc,
             jsDoc,
             members,
-            id,
             isCached: (isCached && sym.declarations!.length === 1) ? true : undefined,
             kind: DeclarationTypes.ENUM
-        });
-        return ref;
+        };
     }
 
     handleTypeAliasDecl(sym: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
@@ -443,36 +457,46 @@ export class Project {
             ref.kind = TypeReferenceKinds.INTERNAL;
             return ref;
         }
-        let id;
-        if (currentModule.types.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
-        currentModule.types.push({
+        const typeDecl = this.createTypeDecl(sym, decl, currentModule, isCached);
+        if (currentModule.types.some(int => int.name === sym.name)) ref.id = typeDecl.id = this.idAcc++;
+        currentModule.types.push(typeDecl);
+        return ref;
+    }
+
+    createTypeDecl(sym: ts.Symbol, decl: ts.TypeAliasDeclaration|undefined, currentModule: Module, isCached?: boolean) : TypeDecl {
+        if (!decl) decl = sym.declarations!.find(decl => ts.isTypeAliasDeclaration(decl)) as ts.TypeAliasDeclaration;
+        return {
             name: sym.name,
             value: this.resolveType(decl.type),
             typeParameters: decl.typeParameters?.map(param => this.resolveTypeParameters(param)),
             loc: this.getLOC(currentModule, decl, true),
             jsDoc: this.getJSDocData(decl),
-            id,
             isCached,
             kind: DeclarationTypes.TYPE_ALIAS
-        });
-        return ref;
+        };
     }
 
     handleNamespaceDecl(symbol: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
         const firstDecl = symbol.declarations!.find(t => ts.isModuleDeclaration(t)) as ts.ModuleDeclaration;
         if (!firstDecl) return;
-        const newMod = createModule(firstDecl.name.text, [...currentModule.path, firstDecl.name.text], false, this.getLOC(currentModule, firstDecl).sourceFile, true);
-        newMod.exports.index = { exports: [], reExports: [] };
-        const namespaceLoc = this.getLOC(currentModule, firstDecl);
-        newMod.repository = namespaceLoc.sourceFile;
-        currentModule.modules.set(newMod.name, newMod);
-        newMod.jsDoc = this.getJSDocData(firstDecl);
+        currentModule.modules.set(symbol.name, this.createNamespaceDecl(symbol, firstDecl, currentModule, isCached));
         const ref = {
             name: symbol.name,
             path: currentModule.path,
             kind: TypeReferenceKinds.NAMESPACE_OR_MODULE
         };
         this.extractor.refs.set(symbol, ref);
+        return ref;
+    }
+
+    createNamespaceDecl(symbol: ts.Symbol, firstDecl: ts.ModuleDeclaration|undefined, currentModule: Module, isCached?: boolean) : Module {
+        if (!firstDecl) firstDecl = symbol.declarations!.find(t => ts.isModuleDeclaration(t)) as ts.ModuleDeclaration;
+        const newMod = createModule(symbol.name, [...currentModule.path, firstDecl.name.text], false, this.getLOC(currentModule, firstDecl).sourceFile, true);
+        newMod.exports.index = { exports: [], reExports: [] };
+        const namespaceLoc = this.getLOC(currentModule, firstDecl);
+        newMod.repository = namespaceLoc.sourceFile;
+        currentModule.modules.set(newMod.name, newMod);
+        newMod.jsDoc = this.getJSDocData(firstDecl);
         this.ignoreNamespaceMembers = true;
         const areChildrenCached = isCached && symbol.declarations!.length === 1 ? true : undefined;
         // @ts-expect-error You should be able to do that
@@ -482,7 +506,7 @@ export class Project {
             if (sym) newMod.exports.index.exports.push(sym);
         }
         this.ignoreNamespaceMembers = false;
-        return ref;
+        return newMod;
     }
 
     handleVariableDecl(sym: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
@@ -497,11 +521,23 @@ export class Project {
             ref.kind = TypeReferenceKinds.INTERNAL;
             return ref;
         }
+        const variable = this.createVariableDecl(sym, decl, currentModule, isCached);
+        if (variable.kind === DeclarationTypes.CONSTANT) {
+            currentModule.constants.push(variable);
+            if (currentModule.constants.some(int => int.name === sym.name)) ref.id = variable.id = this.idAcc++;
+        } else {
+            currentModule.functions.push(variable);
+            if (currentModule.functions.some(int => int.name === sym.name)) ref.id = variable.id = this.idAcc++;
+        }
+        return ref;
+    }
+
+    createVariableDecl(sym: ts.Symbol, decl: ts.Declaration|undefined, currentModule: Module, isCached?: boolean) : ConstantDecl|FunctionDecl {
+        if (!decl) decl = sym.declarations!.find(decl => ts.isVariableDeclaration(decl) || ts.isBindingElement(decl)) as ts.Declaration;
         let name = "";
         let type: Type|undefined;
         let comment;
         let text = "";
-        let id;
         if (ts.isBindingElement(decl)) {
             type = this.resolveTypeType(this.extractor.checker.getTypeAtLocation(decl));
             name = decl.name.getText();
@@ -514,36 +550,30 @@ export class Project {
                 text = initializerText && (initializerText.length > maxLen) ? `${initializerText.slice(0, maxLen)}...` : initializerText;
                 if (!type) type = this.resolveExpressionToType(decl.initializer);
             }
-            if (currentModule.constants.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
             name = decl.name.getText();
             comment = this.getJSDocData(decl.parent.parent);
         }
         const realType = type as Type;
-        if (realType.kind === TypeKinds.ARROW_FUNCTION) {
-            ref.kind = TypeReferenceKinds.FUNCTION;
-            currentModule.functions.push({
-                name,
-                loc: this.getLOC(currentModule, decl, true),
-                signatures: [{
-                    parameters: realType.parameters,
-                    returnType: realType.returnType,
-                    typeParameters: realType.typeParameters
-                }],
-                jsDoc: comment,
-                kind: DeclarationTypes.FUNCTION
-            });
-        }
-        else currentModule.constants.push({
+        if (realType.kind === TypeKinds.ARROW_FUNCTION) return {
+            name,
+            loc: this.getLOC(currentModule, decl, true),
+            signatures: [{
+                parameters: realType.parameters,
+                returnType: realType.returnType,
+                typeParameters: realType.typeParameters
+            }],
+            jsDoc: comment,
+            kind: DeclarationTypes.FUNCTION
+        };
+        else return {
             name,
             loc: this.getLOC(currentModule, decl, true),
             jsDoc: comment,
             content: text,
             type,
-            id,
             isCached,
             kind: DeclarationTypes.CONSTANT
-        });
-        return ref;
+        };
     }
 
     handleFunctionDecl(sym: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
@@ -558,6 +588,14 @@ export class Project {
             ref.kind = TypeReferenceKinds.INTERNAL;
             return ref;
         }
+        const fn = this.createFunctionDecl(sym, lastDecl, currentModule, isCached);
+        if (currentModule.functions.some(int => int.name === sym.name)) ref.id = fn.id = this.idAcc++;
+        currentModule.functions.push(fn);
+        return ref;
+    }
+
+    createFunctionDecl(sym: ts.Symbol, lastDecl: ts.FunctionDeclaration|undefined, currentModule: Module, isCached?: boolean) : FunctionDecl {
+        if (!lastDecl) lastDecl = sym.declarations![sym.declarations!.length - 1] as ts.FunctionDeclaration;
         const signatures = [];
         for (const decl of sym.declarations!) {
             if (!ts.isFunctionDeclaration(decl)) continue;
@@ -568,18 +606,14 @@ export class Project {
                 jsDoc: this.getJSDocData(decl)
             });
         }
-        let id;
-        if (currentModule.functions.some(int => int.name === sym.name)) ref.id = id = this.idAcc++;
-        currentModule.functions.push({
+        return {
             name: sym.name,
             signatures,
             loc: this.getLOC(currentModule, lastDecl, true),
             isGenerator: Boolean(lastDecl.asteriskToken),
-            id,
             isCached,
             kind: DeclarationTypes.FUNCTION
-        });
-        return ref;
+        };
     }
 
     resolveSymbolOrStr(node: ts.Node, typeArguments?: Array<Type>): Type {
