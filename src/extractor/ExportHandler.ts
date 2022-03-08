@@ -87,8 +87,6 @@ export interface FileExports {
     reExports: Array<ExportedElement>
 }
 
-
-
 export function registerDirectReExport(project: Project, currentModule: Module, decl: ts.StringLiteral): void {
     const currentSourceFile = decl.getSourceFile().fileName;
     const sourceFile = resolveSourceFile(project.extractor, currentSourceFile, decl.text);

@@ -7,7 +7,7 @@ import { findPackageJSON, PackageJSON, removePartOfEndOfPath } from "../utils";
 import { createHost, createWatchHost, WatchHost } from "./Host";
 import { Project } from "./Project";
 import { ExternalReference, ReferenceManager } from "./ReferenceManager";
-import { Declaration, Module } from "./structure";
+import { Module, ReferenceType } from "./structure";
 
 export abstract class FileObjectCache {
     /**
@@ -19,9 +19,13 @@ export abstract class FileObjectCache {
 }
 
 /**
- * A function which gets called when a item from a module gets updated.
+ * A function which gets called when a file gets updated.
+ * 
+ * @param refs - All references of items which are inside of the file.
+ * @param module - The module which owns the file.
+ * @param project - The project which owns the module.
  */
-export type WatchFn = (decls: Array<Declaration>, module: Module, project: Project) => void;
+export type WatchFn = (refs: Array<ReferenceType>, module: Module, project: Project) => void;
 
 export interface TypescriptExtractorSettings {
     /**

@@ -166,7 +166,6 @@ export class Project {
         if (this.extractor.refs.has(aliased)) return this.extractor.refs.get(aliased);
         if (aliased.declarations && aliased.declarations.length) return this.extractor.refs.findExternal(aliased);
         return;
-
     }
 
     handleClassDecl(symbol: ts.Symbol, currentModule: Module, isCached?: boolean): ReferenceType | undefined {
@@ -523,11 +522,11 @@ export class Project {
         }
         const variable = this.createVariableDecl(sym, decl, currentModule, isCached);
         if (variable.kind === DeclarationTypes.CONSTANT) {
-            currentModule.constants.push(variable);
             if (currentModule.constants.some(int => int.name === sym.name)) ref.id = variable.id = this.idAcc++;
+            currentModule.constants.push(variable);
         } else {
-            currentModule.functions.push(variable);
             if (currentModule.functions.some(int => int.name === sym.name)) ref.id = variable.id = this.idAcc++;
+            currentModule.functions.push(variable);
         }
         return ref;
     }
