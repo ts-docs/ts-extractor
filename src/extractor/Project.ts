@@ -4,7 +4,7 @@ import ts from "typescript";
 import { DeclarationTypes, ObjectProperty, TypescriptExtractor } from ".";
 import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON, } from "../utils";
 import { registerDirectExport, registerDirectReExport, registerNamespaceReExport, registerOtherExportOrReExport } from "./ExportHandler";
-import { ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, FunctionParameter, JSDocData, JSDocTag, Loc, Module, ObjectLiteral, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
+import { ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, FunctionParameter, JSDocData, JSDocTag, Loc, MappedTypeModifiers, Module, ObjectLiteral, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
 import { forEachModule } from "./utils";
 
 export class Project {
@@ -710,9 +710,11 @@ export class Project {
         else if (ts.isMappedTypeNode(type)) {
             return {
                 typeParameter: type.typeParameter.name.text,
-                optional: Boolean(type.questionToken),
+                optional: type.questionToken ? type.questionToken.kind === ts.SyntaxKind.MinusToken ? MappedTypeModifiers.NEGATED : MappedTypeModifiers.PRESENT : undefined,
+                readonly: type.readonlyToken ? type.readonlyToken.kind === ts.SyntaxKind.MinusToken ? MappedTypeModifiers.NEGATED : MappedTypeModifiers.PRESENT : undefined,
                 type: type.type && this.resolveType(type.type),
                 constraint: type.typeParameter.constraint && this.resolveType(type.typeParameter.constraint),
+                as: type.nameType && this.resolveType(type.nameType),
                 kind: TypeKinds.MAPPED_TYPE
             };
         }

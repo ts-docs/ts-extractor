@@ -424,6 +424,17 @@ export interface EnumDecl extends NodeWithManyLOC {
     kind: DeclarationTypes.ENUM
 }
 
+export const enum MappedTypeModifiers {
+    /**
+     * `readonly` and `?`
+     */
+    PRESENT,
+    /**
+     * `-readonly` and `-?`
+     */
+    NEGATED
+}
+
 /**
  * ```ts
  * type OptionsFlags<Type> = {
@@ -434,7 +445,9 @@ export interface EnumDecl extends NodeWithManyLOC {
 export interface MappedType extends BaseType {
     typeParameter: string,
     constraint?: Type,
-    optional?: boolean,
+    optional?: MappedTypeModifiers,
+    readonly?: MappedTypeModifiers,
+    as?: Type,
     type?: Type,
     kind: TypeKinds.MAPPED_TYPE
 }
