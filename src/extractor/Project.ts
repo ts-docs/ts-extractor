@@ -154,7 +154,7 @@ export class Project {
         if (hasBit(val.flags, ts.SymbolFlags.TypeAlias)) type = this.handleTypeAliasDecl(val, currentModule, isCached);
         if (hasBit(val.flags, ts.SymbolFlags.Variable) && !hasBit(val.flags, ts.SymbolFlags.FunctionScopedVariable)) type = this.handleVariableDecl(val, currentModule, isCached);
         if (hasBit(val.flags, ts.SymbolFlags.Function)) type = this.handleFunctionDecl(val, currentModule, isCached);
-        if (hasBit(val.flags, ts.SymbolFlags.Class)) type = this.handleClassDecl(val, currentModule, isCached);
+        if (hasBit(val.flags, ts.SymbolFlags.Class) && val.name !== "__class") type = this.handleClassDecl(val, currentModule, isCached);
         if (hasBit(val.flags, ts.SymbolFlags.EnumMember)) {
             //@ts-expect-error Private property
             const parent = val.parent;
