@@ -869,7 +869,8 @@ export class Project {
             rest: Boolean(param.dotDotDotToken),
             type: param.type && this.resolveType(param.type),
             defaultValue: param.initializer && this.resolveExpressionToType(param.initializer),
-            jsDoc: { comment: this.getJSDocCommentOfParam(param), tags: [] }
+            description: this.getJSDocCommentOfParam(param),
+            jsDoc: this.getJSDocDataRaw(param)?.[0]
         };
     }
 

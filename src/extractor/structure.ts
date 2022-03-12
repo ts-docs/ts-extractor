@@ -249,7 +249,11 @@ export interface FunctionParameter {
     rest?: boolean,
     isOptional?: boolean,
     defaultValue?: Type,
-    jsDoc?: JSDocData
+    jsDoc?: JSDocData,
+    /**
+     * `@param` tag description
+     */
+    description?: string
 }
 
 export interface FunctionSignature extends LoclessNode {
