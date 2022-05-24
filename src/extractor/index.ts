@@ -68,7 +68,11 @@ export interface TypescriptExtractorSettings {
     /**
      * A custom typescript compiler host.
      */
-    compilerHost?: (tsconfig: ts.CompilerOptions) => ts.CompilerHost
+    compilerHost?: (tsconfig: ts.CompilerOptions) => ts.CompilerHost,
+    /**
+     * Documents all imports, even if they aren't being exported or used in exported items.
+     */
+    documentImports?: boolean
 }
 
 export class TypescriptExtractor {

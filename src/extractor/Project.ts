@@ -3,7 +3,7 @@ import path from "path";
 import ts from "typescript";
 import { DeclarationTypes, ObjectProperty, TypescriptExtractor } from ".";
 import { getLastItemFromPath, getReadme, getRepository, hasBit, PackageJSON, } from "../utils";
-import { registerDirectExport, registerDirectReExport, registerNamespaceReExport, registerOtherExportOrReExport } from "./ExportHandler";
+import { registerDirectExport, registerDirectReExport, registerNamespaceReExport, registerOtherExportOrReExport, resolveSourceFile } from "./ExportHandler";
 import { ArrowFunction, ClassDecl, ClassMethod, ClassProperty, createModule, FunctionParameter, JSDocData, JSDocTag, Loc, MappedTypeModifiers, Module, ObjectLiteral, Reference, ReferenceType, Type, TypeKinds, TypeParameter, TypeReferenceKinds } from "./structure";
 import { forEachModule } from "./utils";
 
@@ -78,6 +78,16 @@ export class Project {
                 }
             }
         }
+
+        if (this.extractor.settings.documentImports) {
+            const file = sym.valueDeclaration!.getSourceFile();
+            //@ts-expect-error Private property
+            for (const childFile of (file.imports as Array<ts.StringLiteral>)) {
+                const source = resolveSourceFile(this.extractor, file.fileName, childFile.text);
+                if (source) this.visitor(source, this.getOrCreateModule(source.fileName));
+            }
+        }
+
         return;
     }
 
