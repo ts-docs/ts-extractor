@@ -9,7 +9,8 @@
     "@typescript-eslint/parser": "^4.28.4",
     "eslint": "^7.31.0",
     "jest": "^27.4.7",
-    "typescript": "^4.8.2"
+    "@types/ts-expose-internals": "npm:ts-expose-internals@^4.9.4",
+    "typescript": "^5.0.4"
   },
   "scripts": {
     "run": "tsc && node .",
